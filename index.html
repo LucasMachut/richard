@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.4";
+const APP_VERSION="2.5";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1425,7 +1425,7 @@ function openAluno(id){
     }
     body+=`<div class="info-line"><span class="k">${MESES[new Date().getMonth()]}</span><span class="v" style="color:${pagoMes(a.id,ym)?'var(--green)':'var(--amber)'}">${pagoMes(a.id,ym)?"Pago ✓":"Pendente"}</span></div>`;
   }else{
-    const pend=state.aulas.filter(x=>x.alunoId===a.id&&cobravel(x)&&!x.pago);
+    const pend=state.aulas.filter(x=>x.alunoId===a.id&&!x.pago&&x.status!=="cancelada"&&!(x.status==="faltou"&&!x.faltaCobrada));
     const tot=pend.reduce((s,x)=>s+(Number(x.valor)||0),0);
     body+=`<div class="info-line"><span class="k">Valor por aula</span><span class="v">${money(a.valorAula)}</span></div>
      <div class="info-line"><span class="k">Aulas a receber</span><span class="v">${pend.length}</span></div>
