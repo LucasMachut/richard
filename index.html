@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.3";
+const APP_VERSION="2.4";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -522,6 +522,28 @@ function migrate(s){
         cur.setDate(cur.getDate()+7);}
     });
     s._recJun1=1;
+  }
+  // Botafogo = 2 vacations le vendredi (19h-20h + 20h-21h) au lieu d'une de 2h — une fois
+  if(!s._botaSplit){
+    const bota=(s.velUnidades||[]).find(u=>/botafogo/i.test(u.nome||""));
+    if(bota){
+      const bid=bota.id;
+      // retirer les anciennes séries Botafogo + leurs vacations encore "agendada" (on garde l'historique réalisé/payé)
+      s.velSeries=(s.velSeries||[]).filter(se=>se.unidadeId!==bid);
+      s.vacacoes=(s.vacacoes||[]).filter(v=>!(v.unidadeId===bid&&v.serieId&&v.status==="agendada"));
+      const horizon=new Date();horizon.setDate(horizon.getDate()+70);
+      const firstFri=new Date(2026,5,1);firstFri.setDate(firstFri.getDate()+((5-firstFri.getDay()+7)%7));
+      ["19:00","20:00"].forEach(hora=>{
+        const se={id:uid(),unidadeId:bid,hora,dur:60,valor:Number(bota.valorPadrao)||50,local:"",desde:ymdOf(firstFri),ativo:true};
+        s.velSeries.push(se);
+        let cur=new Date(firstFri);
+        while(cur<=horizon){const ymd=ymdOf(cur);
+          if(!(s.vacacoes||[]).some(v=>v.serieId===se.id&&v.data===ymd))
+            s.vacacoes.push({id:uid(),unidadeId:bid,data:ymd,hora,dur:60,valor:se.valor,local:"",status:"agendada",pago:false,serieId:se.id});
+          cur.setDate(cur.getDate()+7);}
+      });
+    }
+    s._botaSplit=1;
   }
   s._appVersion=APP_VERSION;
   return s;
@@ -596,7 +618,8 @@ function nextWeekday(dow){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.get
 function defaultVelSeries(vp,leblonId,botafogoId){vp=Number(vp)||0;botafogoId=botafogoId||leblonId;return [
   {id:uid(),unidadeId:leblonId,hora:"20:30",dur:60,valor:vp,local:"",desde:nextWeekday(2),ativo:true},  // terça — Leblon 20:30–21:30
   {id:uid(),unidadeId:leblonId,hora:"20:30",dur:60,valor:vp,local:"",desde:nextWeekday(4),ativo:true},  // quinta — Leblon 20:30–21:30
-  {id:uid(),unidadeId:botafogoId,hora:"19:00",dur:120,valor:vp,local:"",desde:nextWeekday(5),ativo:true}, // sexta — Botafogo 19:00–21:00
+  {id:uid(),unidadeId:botafogoId,hora:"19:00",dur:60,valor:vp,local:"",desde:nextWeekday(5),ativo:true}, // sexta — Botafogo 19:00–20:00
+  {id:uid(),unidadeId:botafogoId,hora:"20:00",dur:60,valor:vp,local:"",desde:nextWeekday(5),ativo:true}, // sexta — Botafogo 20:00–21:00
 ];}
 function ensureVelSerie(serie){
   if(!serie||!serie.ativo)return;
@@ -1066,6 +1089,18 @@ function previsaoAno(year){
   (state.velSeries||[]).forEach(se=>projectSerie(se,Y,arr,"vel"));
   return arr;
 }
+/* prévision d'un mois précis : {perso, vel:{unidadeId:montant}} */
+function previsaoMes(ym){
+  const [Y,Mn]=ym.split("-").map(Number);const mi=Mn-1;
+  const monthCount=(desde,ativo)=>{if(ativo===false||!desde)return 0;let c=parseYmd(desde);const first=new Date(Y,mi,1),last=new Date(Y,mi+1,0);while(c<first)c.setDate(c.getDate()+7);let n=0;while(c<=last){n++;c.setDate(c.getDate()+7);}return n;};
+  let perso=0;const vel={};
+  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{perso+=Number(a.mensalidade)||0;});
+  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.status==="cancelada"||(a.status==="faltou"&&!a.faltaCobrada))return;if((a.data||"").startsWith(ym))perso+=Number(a.valor)||0;});
+  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(v.status==="cancelada"||(v.status==="faltou"&&!v.faltaCobrada))return;if((v.data||"").startsWith(ym))vel[v.unidadeId]=(vel[v.unidadeId]||0)+(Number(v.valor)||0);});
+  (state.series||[]).forEach(se=>{perso+=monthCount(se.desde,se.ativo)*(Number(se.valor)||0);});
+  (state.velSeries||[]).forEach(se=>{vel[se.unidadeId]=(vel[se.unidadeId]||0)+monthCount(se.desde,se.ativo)*(Number(se.valor)||0);});
+  return {perso,vel};
+}
 function renderFinanceiro(){
   const el=document.getElementById("page-financeiro");
   if(!ui.finMonth)ui.finMonth=ymNow();
@@ -1084,7 +1119,16 @@ function renderFinanceiro(){
   // NB: Velocity é contabilizado à parte (não entra no recebido/a receber das aulas próprias)
   const despMes=(state.despesas||[]).filter(x=>(x.data||"").startsWith(ym)).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
   const despTot=despMes.reduce((s,x)=>s+(Number(x.valor)||0),0);
-  const liquido=recebido-despTot;
+  // ---- prévision + total a receber (cohérent sur tous les mois, y compris au-delà des séances générées) ----
+  const prev=previsaoMes(ym);
+  const aReceberPerso=Math.max(0,prev.perso-recebido);
+  const recVel={};
+  (state.vacacoes||[]).forEach(v=>{if(cobravel(v)&&v.pago&&(v.dataPago||v.data||"").startsWith(ym))recVel[v.unidadeId]=(recVel[v.unidadeId]||0)+(Number(v.valor)||0);});
+  let recVelTot=0,aReceberVelTot=0;const arVelU={};
+  (state.velUnidades||[]).forEach(u=>{const rec=recVel[u.id]||0;const exp=(prev.vel&&prev.vel[u.id])||0;const ar=Math.max(0,exp-rec);recVelTot+=rec;aReceberVelTot+=ar;arVelU[u.id]=ar;});
+  const recebidoTotal=recebido+recVelTot;
+  const aReceberTotal=aReceberPerso+aReceberVelTot;
+  const liquido=recebidoTotal-despTot;
 
   const ativos=state.alunos.filter(a=>a.ativo!==false);
   // monta linha por aluno p/ o mês selecionado
@@ -1165,43 +1209,31 @@ function renderFinanceiro(){
   if(avulso.length){listHtml+=`<div class="section-title">Avulsos <span class="count">${avulso.length}</span></div>`;avulso.forEach(a=>listHtml+=linhaAluno(a));}
   if(!ativos.length)listHtml=`<div class="empty" style="padding:36px"><div class="ico">👥</div><h3>Nenhum aluno</h3><p>Cadastre alunos para ver o resumo do mês.</p></div>`;
 
-  // ---- Velocity / parceria (par unidade) ----
-  const vacMes=(state.vacacoes||[]).filter(v=>(v.data||"").startsWith(ym)).sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
+  // ---- Velocity / parceria (par unité, prévisionnel cohérent tous les mois) ----
   let velHtml="";
-  if(vacMes.length){
-    const groups={};
-    vacMes.forEach(v=>{const k=v.unidadeId||"_";(groups[k]=groups[k]||[]).push(v);});
-    Object.keys(groups).forEach(k=>{
-      const list=groups[k];const uNome=velNomeFull(list[0].unidadeId);const uc=velCor(list[0].unidadeId);
-      let rec=0,pend=0;list.forEach(v=>{
-        if(v.status==="cancelada")return;
-        if(v.status==="faltou"&&!v.faltaCobrada)return;
-        const val=Number(v.valor)||0;
-        if(v.pago)rec+=val;else pend+=val; // pend inclut les vacations prévues (agendadas) = a receber
-      });
-      const nReal=list.filter(v=>v.status==="realizada").length;
-      velHtml+=`<div class="section-title"><span style="color:${uc}">🟣 ${esc(uNome)}</span> <span class="count">${list.length}</span></div>`;
-      velHtml+=(rec>0||pend>0)
-        ? `<div class="summary" style="margin:0 0 12px">
-            <div class="sum" style="border-color:${uc}33"><div class="lbl" style="color:${uc}">Recebido</div><div class="val" style="color:${uc}">${money(rec)}</div></div>
-            <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(pend)}</div></div>
-          </div>`
-        : `<div class="sum full" style="margin:0 0 12px;border-color:${uc}33"><div class="lbl" style="color:${uc}">${list.length} sessão(ões) · ${nReal} realizada(s)</div><div class="val" style="font-size:14px;color:var(--ink-soft);font-weight:600">Valor não fixo — informe ao receber</div></div>`;
-      list.forEach(v=>{
-        const d=parseYmd(v.data);const realizada=v.status==="realizada";
-        let right;
-        if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
-        else if(v.status==="faltou")right=`<span class="pa neutral">Faltou</span>`;
-        else if(!realizada)right=`<span class="pa neutral">Agendada</span>`;
-        else if(v.pago)right=`<span class="pa ok">Recebido</span>`;
-        else right=`<span class="pa due">A receber</span>`;
-        velHtml+=`<div class="aluno" data-vacfin="${v.id}">
-          <div class="avatar" style="background:${uc}">${esc(((velUnidade(v.unidadeId).nome||"V")[0]||"V").toUpperCase())}</div>
-          <div class="body"><div class="nm">${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} · ${v.hora}</div><div class="meta">${esc(uNome)}${v.local?" · "+esc(v.local):""}</div></div>
-          <div class="pay-state">${right}</div></div>`;
-      });
+  (state.velUnidades||[]).forEach(u=>{
+    const uc=u.cor||VEL_COR;const uNome="Velocity "+(u.nome||"");
+    const list=(state.vacacoes||[]).filter(v=>v.unidadeId===u.id&&(v.data||"").startsWith(ym)).sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
+    const rec=recVel[u.id]||0;const ar=arVelU[u.id]||0;
+    if(rec<=0&&ar<=0&&!list.length)return; // rien ce mois pour cette unité
+    velHtml+=`<div class="section-title"><span style="color:${uc}">🟣 ${esc(uNome)}</span> ${list.length?`<span class="count">${list.length}</span>`:""}</div>
+      <div class="summary" style="margin:0 0 12px">
+        <div class="sum" style="border-color:${uc}33"><div class="lbl" style="color:${uc}">Recebido</div><div class="val" style="color:${uc}">${money(rec)}</div></div>
+        <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(ar)}</div></div>
+      </div>`;
+    list.forEach(v=>{
+      const d=parseYmd(v.data);const realizada=v.status==="realizada";let right;
+      if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
+      else if(v.status==="faltou")right=`<span class="pa neutral">Faltou</span>`;
+      else if(!realizada)right=`<span class="pa neutral">Agendada</span>`;
+      else if(v.pago)right=`<span class="pa ok">Recebido</span>`;
+      else right=`<span class="pa due">A receber</span>`;
+      velHtml+=`<div class="aluno" data-vacfin="${v.id}">
+        <div class="avatar" style="background:${uc}">${esc(((u.nome||"V")[0]||"V").toUpperCase())}</div>
+        <div class="body"><div class="nm">${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} · ${v.hora}</div><div class="meta">${esc(uNome)}${v.local?" · "+esc(v.local):""}</div></div>
+        <div class="pay-state">${right}</div></div>`;
     });
-  }
+  });
 
   // gráfico anual
   const year=Number(ym.slice(0,4));
@@ -1226,9 +1258,13 @@ function renderFinanceiro(){
   </div>
   ${chartHtml}
   <div class="summary">
-    <div class="sum green"><div class="lbl">Recebido</div><div class="val">${money(recebido)}</div></div>
-    <div class="sum amber"><div class="lbl">A receber</div><div class="val">${money(aReceber)}</div></div>
+    <div class="sum green"><div class="lbl">Recebido</div><div class="val">${money(recebidoTotal)}</div></div>
+    <div class="sum amber"><div class="lbl">A receber</div><div class="val">${money(aReceberTotal)}</div></div>
     <div class="sum full"><div class="lbl">Líquido (recebido − despesas)</div><div class="val" style="color:${liquido>=0?'var(--green)':'var(--red)'}">${money(liquido)}</div></div>
+  </div>
+  <div class="card" style="padding:14px 16px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><span class="lbl" style="color:var(--amber)">Total a receber</span><span style="font-size:20px;font-weight:800;color:var(--amber)">${money(aReceberTotal)}</span></div>
+    <div class="hint" style="margin:0">Personal ${money(aReceberPerso)}${(state.velUnidades||[]).map(u=>` · ${esc(u.nome)} ${money(arVelU[u.id]||0)}`).join("")}</div>
   </div>
   ${cobrHtml}
   <div class="section-title">Alunos em ${MESES[m-1]} <span class="count">${ativos.length}</span></div>
