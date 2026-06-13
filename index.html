@@ -1271,10 +1271,10 @@ function aulaAction(id,act){
     state.aulas=state.aulas.filter(x=>!(x.serieId===serie.id&&x.status==="agendada"&&x.data>hj));
     mark();closeSheet();render();toast("Recorrência encerrada");return;
   }
-  if(act==="realizada"){a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"&&!a.valor)a.valor=al.valorAula;}
+  if(act==="realizada"){a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=Number(al.valorAula)||0;if(!a.valor){const v=prompt("Valor desta aula avulsa (R$):","");if(v!==null)a.valor=Number(v)||0;}}}
   if(act==="faltou"){a.status="faltou";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=al.valorAula;a.faltaCobrada=confirm("Cobrar esta falta mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}}
   if(act==="agendada"){a.status="agendada";a.pago=false;}
-  if(act==="pago"){a.pago=true;a.dataPago=todayYmd();toast("Pagamento registrado ✓","green");}
+  if(act==="pago"){if(al&&al.tipo==="avulso"&&!a.valor){const v=prompt("Valor recebido (R$):","");if(v!==null)a.valor=Number(v)||0;}a.pago=true;a.dataPago=todayYmd();toast("Pagamento registrado ✓","green");}
   if(act==="naopago"){a.pago=false;a.dataPago=null;}
   mark();closeSheet();render();
 }
