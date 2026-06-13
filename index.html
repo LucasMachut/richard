@@ -228,7 +228,8 @@
   .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--brand)}
   .fld textarea{resize:none;min-height:64px}
   .frow{display:flex;gap:11px}
-  .frow .fld{flex:1}
+  .frow .fld{flex:1;min-width:0}
+  .fld input,.fld select{max-width:100%}
   .choice{display:flex;gap:10px}
   .choice button{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--line-strong);background:var(--surface);font-weight:700;color:var(--ink-soft);display:flex;flex-direction:column;align-items:center;gap:3px}
   .choice button small{font-weight:500;font-size:11px;color:var(--ink-faint)}
@@ -451,7 +452,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="1.7";
+const APP_VERSION="1.8";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
