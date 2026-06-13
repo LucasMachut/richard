@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.1";
+const APP_VERSION="2.2";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -499,6 +499,29 @@ function migrate(s){
     (s.vacacoes||[]).forEach(v=>{if(v.status==="agendada"&&!Number(v.valor))v.valor=50;});
     if(s.velocity&&!Number(s.velocity.valorPadrao))s.velocity.valorPadrao=50;
     s._velBase50=1;
+  }
+  // toutes les récurrences existantes démarrent au 1er juin (comble les occurrences manquantes) — une fois
+  if(!s._recJun1){
+    const jun1=new Date(2026,5,1);
+    const horizon=new Date();horizon.setDate(horizon.getDate()+70);
+    const firstOnAfter=(dow,from)=>{const d=new Date(from);d.setHours(0,0,0,0);d.setDate(d.getDate()+((dow-d.getDay()+7)%7));return d;};
+    (s.velSeries||[]).forEach(se=>{
+      if(!se.desde)return;
+      const dow=parseYmd(se.desde).getDay();let cur=firstOnAfter(dow,jun1);se.desde=ymdOf(cur);
+      while(cur<=horizon){const ymd=ymdOf(cur);
+        if(!(s.vacacoes||[]).some(v=>v.serieId===se.id&&v.data===ymd))
+          s.vacacoes.push({id:uid(),unidadeId:se.unidadeId,data:ymd,hora:se.hora,dur:se.dur,valor:se.valor||0,local:se.local||"",status:"agendada",pago:false,serieId:se.id});
+        cur.setDate(cur.getDate()+7);}
+    });
+    (s.series||[]).forEach(se=>{
+      if(!se.desde)return;
+      const dow=parseYmd(se.desde).getDay();let cur=firstOnAfter(dow,jun1);se.desde=ymdOf(cur);
+      while(cur<=horizon){const ymd=ymdOf(cur);
+        if(!(s.aulas||[]).some(a=>a.serieId===se.id&&a.data===ymd))
+          s.aulas.push({id:uid(),alunoId:se.alunoId,data:ymd,hora:se.hora,dur:se.dur,status:"agendada",pago:false,valor:se.valor||0,local:se.local||"",serieId:se.id});
+        cur.setDate(cur.getDate()+7);}
+    });
+    s._recJun1=1;
   }
   s._appVersion=APP_VERSION;
   return s;
