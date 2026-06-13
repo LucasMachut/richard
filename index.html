@@ -409,6 +409,7 @@
         <div class="hd-sub" id="pgSub">—</div>
       </div>
       <button class="icon-btn" id="btnTheme" title="Tema claro/escuro">☀</button>
+      <button class="icon-btn" id="btnRefresh" title="Atualizar app">🔄</button>
       <button class="avatar-btn" id="btnMenu" title="Menu">R</button>
     </div>
     <div id="headerExtra"></div>
@@ -452,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="1.8";
+const APP_VERSION="1.9";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1922,6 +1923,7 @@ function setTab(tab){ui.tab=tab;document.querySelectorAll(".nav button").forEach
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{setTab(b.dataset.tab);render();});
 document.getElementById("fab").onclick=()=>{ if(ui.tab==="alunos")formAluno(null); else if(ui.tab==="financeiro")formDespesa(null); else novoMenu(); };
 document.getElementById("btnMenu").onclick=openMenu;
+document.getElementById("btnRefresh").onclick=atualizarApp;
 document.getElementById("sheetClose").onclick=closeSheet;
 document.getElementById("sheetBg").onclick=closeSheet;
 document.getElementById("fileInput").onchange=e=>{if(e.target.files[0])handleImport(e.target.files[0]);e.target.value="";};
