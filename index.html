@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="1.9";
+const APP_VERSION="2.0";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -492,6 +492,14 @@ function migrate(s){
   if(!s.despesas)s.despesas=[];
   if(!s.config)s.config={coachNome:"Richard",cidade:"Rio"};
   if(!("lastBackup" in s))s.lastBackup=null;
+  // base Velocity = R$ 50 (une fois) : passe les anciennes valeurs à 0 vers 50
+  if(!s._velBase50){
+    (s.velUnidades||[]).forEach(u=>{if(!Number(u.valorPadrao))u.valorPadrao=50;});
+    (s.velSeries||[]).forEach(se=>{if(!Number(se.valor))se.valor=50;});
+    (s.vacacoes||[]).forEach(v=>{if(v.status==="agendada"&&!Number(v.valor))v.valor=50;});
+    if(s.velocity&&!Number(s.velocity.valorPadrao))s.velocity.valorPadrao=50;
+    s._velBase50=1;
+  }
   s._appVersion=APP_VERSION;
   return s;
 }
@@ -501,7 +509,7 @@ function load(){
 }
 function seed(){
   // início : alunos do Richard + Velocity recorrente (sem valor fixo)
-  const vu=defaultVelUnidades(0);
+  const vu=defaultVelUnidades(50);
   const al1={id:uid(),nome:"Afonso",tel:"",tipo:"avulso",mensalidade:0,valorAula:0,venc:0,aulasPlano:0,cor:CORES[0],local:"",ativo:true};
   const al2={id:uid(),nome:"Maria-Clara",tel:"",tipo:"avulso",mensalidade:0,valorAula:0,venc:0,aulasPlano:0,cor:CORES[3],local:"",ativo:true};
   const al3={id:uid(),nome:"Rodrigo",tel:"",tipo:"avulso",mensalidade:0,valorAula:0,venc:0,aulasPlano:0,cor:CORES[1],local:"",ativo:true};
@@ -512,9 +520,9 @@ function seed(){
     pagamentos:[],
     series:[],
     vacacoes:[],
-    velocity:{nome:"Velocity",valorPadrao:0},
+    velocity:{nome:"Velocity",valorPadrao:50},
     velUnidades:vu,
-    velSeries:defaultVelSeries(0,vu[0].id,vu[1].id),
+    velSeries:defaultVelSeries(50,vu[0].id,vu[1].id),
     despesas:[],
     config:{coachNome:"Richard",cidade:"Rio"},
     changes:0
@@ -1762,8 +1770,8 @@ function formEvento(existing,defaultDate){
    MENU / BACKUP
    ===================================================================== */
 function emptyState(){
-  const vu=defaultVelUnidades(70);
-  return {alunos:[],aulas:[],eventos:[],pagamentos:[],series:[],vacacoes:[],velUnidades:vu,velSeries:defaultVelSeries(0,vu[0].id,vu[1].id),despesas:[],velocity:{nome:"Velocity",valorPadrao:0},config:{coachNome:(state.config&&state.config.coachNome)||"Richard",cidade:(state.config&&state.config.cidade)||"Rio"},changes:0};
+  const vu=defaultVelUnidades(50);
+  return {alunos:[],aulas:[],eventos:[],pagamentos:[],series:[],vacacoes:[],velUnidades:vu,velSeries:defaultVelSeries(50,vu[0].id,vu[1].id),despesas:[],velocity:{nome:"Velocity",valorPadrao:50},config:{coachNome:(state.config&&state.config.coachNome)||"Richard",cidade:(state.config&&state.config.cidade)||"Rio"},changes:0};
 }
 function atualizarApp(){
   // recarrega a página forçando a versão mais recente (útil no modo app/standalone do iPhone)
