@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.0";
+const APP_VERSION="2.1";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1129,7 +1129,12 @@ function renderFinanceiro(){
     vacMes.forEach(v=>{const k=v.unidadeId||"_";(groups[k]=groups[k]||[]).push(v);});
     Object.keys(groups).forEach(k=>{
       const list=groups[k];const uNome=velNomeFull(list[0].unidadeId);const uc=velCor(list[0].unidadeId);
-      let rec=0,pend=0;list.forEach(v=>{if(!cobravel(v))return;if(v.pago)rec+=Number(v.valor)||0;else pend+=Number(v.valor)||0;});
+      let rec=0,pend=0;list.forEach(v=>{
+        if(v.status==="cancelada")return;
+        if(v.status==="faltou"&&!v.faltaCobrada)return;
+        const val=Number(v.valor)||0;
+        if(v.pago)rec+=val;else pend+=val; // pend inclut les vacations prévues (agendadas) = a receber
+      });
       const nReal=list.filter(v=>v.status==="realizada").length;
       velHtml+=`<div class="section-title"><span style="color:${uc}">🟣 ${esc(uNome)}</span> <span class="count">${list.length}</span></div>`;
       velHtml+=(rec>0||pend>0)
