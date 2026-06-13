@@ -451,7 +451,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="1.6";
+const APP_VERSION="1.7";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -999,6 +999,10 @@ function alunoCard(a,arquivado){
 function aulasAvulsoMes(alunoId,ym){
   return state.aulas.filter(x=>x.alunoId===alunoId&&cobravel(x)&&(x.data||"").startsWith(ym));
 }
+/* avulso : tout ce qui compte dans le mois (agendada + realizada + falta cobrada) pour la prévision "a receber" — exclut annulées et absences non facturées */
+function aulasMesAvulso(alunoId,ym){
+  return state.aulas.filter(x=>x.alunoId===alunoId&&(x.data||"").startsWith(ym)&&x.status!=="cancelada"&&!(x.status==="faltou"&&!x.faltaCobrada));
+}
 /* receita recebida mês a mês no ano (perso vs Velocity) p/ o gráfico anual */
 function receitaAno(year){
   const arr=Array.from({length:12},()=>({perso:0,vel:0}));
@@ -1046,7 +1050,7 @@ function renderFinanceiro(){
         <div class="body"><div class="nm">${esc(a.nome)}</div><div class="meta">${sub}</div></div>
         <div class="pay-state">${right}</div></div>`;
     }else{
-      const aulasM=aulasAvulsoMes(a.id,ym);
+      const aulasM=aulasMesAvulso(a.id,ym);
       const tot=aulasM.reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pagoVal=aulasM.filter(x=>x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pend=tot-pagoVal;
