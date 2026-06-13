@@ -12,6 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2316D1FF'/%3E%3Cpath d='M7 35 h12 l5 -15 l8 28 l6 -17 h19' fill='none' stroke='%2304121A' stroke-width='5' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -381,6 +382,18 @@
   .ld-now-line{flex:1;display:flex;align-items:center;min-height:22px}
   .ld-now-line::before{content:"";flex:1;height:2px;border-radius:2px;background:var(--brand);box-shadow:0 0 10px rgba(22,209,255,.55)}
   .ld-now-line span{font-size:11px;font-weight:800;color:var(--brand);letter-spacing:.08em;margin-left:10px}
+  /* écran de connexion (cloud) */
+  .login-screen{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;align-items:center;justify-content:center;padding:24px}
+  .login-screen.show{display:flex}
+  .login-box{width:100%;max-width:330px;text-align:center}
+  .login-logo{width:66px;height:66px;border-radius:50%;margin:0 auto 18px;background:radial-gradient(circle at 32% 28%,#39E0FF,#0A8FCB);color:var(--anthra);font-weight:900;font-size:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(22,209,255,.45),0 8px 30px rgba(22,209,255,.4)}
+  .login-box h2{margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em}
+  .login-sub{color:var(--ink-faint);font-size:14px;margin:0 0 22px}
+  .login-box input{width:100%;padding:14px;border:1.5px solid var(--line-strong);border-radius:12px;background:var(--surface);margin-bottom:12px;font-size:16px;color:var(--ink)}
+  .login-box input:focus{outline:none;border-color:var(--brand)}
+  .login-box .btn{width:100%;margin-top:4px}
+  .login-err{color:var(--red);font-size:13px;margin-bottom:12px;font-weight:600}
+  .login-skip{margin-top:16px;color:var(--ink-faint);font-size:13px;text-decoration:underline;background:none;display:block;width:100%}
 </style>
 </head>
 <body>
@@ -438,7 +451,14 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="1.4";
+const APP_VERSION="1.5";
+/* ---- Supabase (synchro cloud) ---- */
+const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
+const SUPA_ROW="richard";
+const SUPA_EMAIL="richardazevedoprof@gmail.com";
+const DIRTY_KEY="richard_dirty";
+let sb=null, cloudReady=false, pushTimer=null, applyingRemote=false;
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const DIAS=["dom","seg","ter","qua","qui","sex","sáb"];
@@ -498,7 +518,7 @@ function seed(){
     changes:0
   };
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erro ao salvar","amber");}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erro ao salvar","amber");} cloudPushDebounced();}
 function mark(){state.changes=(state.changes||0)+1;save();}
 
 /* ---------- helpers ---------- */
@@ -1753,10 +1773,12 @@ function openConfig(){
     <div class="hint" style="margin:2px 0 14px">Aparece no topo: « ${esc(greeting())}, ${esc(c.coachNome||"Richard")} » e na data.</div>
     <div class="act" id="cfUpdate" style="background:var(--brand-soft);border-color:transparent"><div class="ai" style="background:rgba(22,209,255,.22);color:var(--brand)">🔄</div><div><div>Buscar atualização</div><div class="sub">Recarrega a versão mais recente do app</div></div></div>
     <div class="act red" id="cfReset"><div class="ai">♻️</div><div><div>Recomeçar do zero</div><div class="sub">Apaga alunos, aulas, despesas... (mantém as unidades Velocity)</div></div></div>
+    <div class="act grey" id="cfLogout"><div class="ai">🚪</div><div><div>Sair / trocar conta</div><div class="sub">Desconecta a sincronização na nuvem</div></div></div>
     <div class="hint" style="text-align:center;margin-top:14px;opacity:.7">Richard • Personal — versão ${APP_VERSION}</div>`;
   const foot=`<button class="btn btn-primary" id="cfSave">Salvar</button>`;
   openSheet("Configurações",body,foot);
   document.getElementById("cfUpdate").onclick=atualizarApp;
+  {const lo=document.getElementById("cfLogout");if(lo)lo.onclick=()=>{closeSheet();cloudLogout();};}
   document.getElementById("cfSave").onclick=()=>{
     c.coachNome=document.getElementById("cfNome").value.trim()||"Richard";
     c.cidade=document.getElementById("cfCidade").value.trim();
@@ -1915,6 +1937,85 @@ topUpVelSeries(); // idem para as vacações Velocity recorrentes
 document.getElementById("btnTheme").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="light"?"dark":"light");
 
 render();
+
+/* ============================================================
+   SYNCHRO CLOUD (Supabase) — état stocké comme 1 enregistrement
+   ============================================================ */
+function setDirty(v){try{v?localStorage.setItem(DIRTY_KEY,"1"):localStorage.removeItem(DIRTY_KEY);}catch(e){}}
+function isDirty(){try{return localStorage.getItem(DIRTY_KEY)==="1";}catch(e){return false;}}
+function cloudInit(){
+  if(!window.supabase){return;} // hors-ligne / CDN bloqué → mode local uniquement
+  try{ sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true}}); }catch(e){ return; }
+  sb.auth.getSession().then(({data})=>{ (data&&data.session)?onAuthed():showLogin(); }).catch(()=>{});
+}
+function showLogin(msg){
+  let o=document.getElementById("loginScreen");
+  if(!o){o=document.createElement("div");o.id="loginScreen";document.body.appendChild(o);}
+  o.className="login-screen show";
+  o.innerHTML=`<div class="login-box">
+    <div class="login-logo">R</div>
+    <h2>Richard • Personal</h2>
+    <p class="login-sub">Entre para sincronizar seus dados</p>
+    <input id="logEmail" type="email" value="${esc(SUPA_EMAIL)}" placeholder="email" autocomplete="username">
+    <input id="logPass" type="password" placeholder="senha" autocomplete="current-password">
+    ${msg?`<div class="login-err">${esc(msg)}</div>`:""}
+    <button class="btn btn-primary" id="logBtn">Entrar</button>
+    <button class="login-skip" id="logSkip">Usar só neste aparelho (sem nuvem)</button>
+  </div>`;
+  document.getElementById("logBtn").onclick=async()=>{
+    const email=document.getElementById("logEmail").value.trim();
+    const password=document.getElementById("logPass").value;
+    const b=document.getElementById("logBtn");b.textContent="Entrando…";
+    try{
+      const {error}=await sb.auth.signInWithPassword({email,password});
+      if(error){showLogin(error.message&&/Invalid login/i.test(error.message)?"Email ou senha incorretos":(error.message||"Erro"));}
+      else{o.classList.remove("show");onAuthed();}
+    }catch(e){showLogin("Sem conexão. Tente de novo.");}
+  };
+  document.getElementById("logSkip").onclick=()=>o.classList.remove("show");
+}
+async function onAuthed(){
+  cloudReady=true;
+  try{
+    const {data,error}=await sb.from("app_state").select("data").eq("id",SUPA_ROW).maybeSingle();
+    if(!error){
+      if(data&&data.data){
+        if(isDirty()){ await cloudPush(); }                 // modifs locales non poussées → on garde le local et on pousse
+        else { applyingRemote=true; state=migrate(data.data); save(); render(); applyingRemote=false; }
+      }else{ await cloudPush(); }                            // pas encore de ligne cloud → on initialise avec le local
+    }
+  }catch(e){}
+  subscribeRealtime();
+  window.addEventListener("online",()=>{ if(isDirty())cloudPush(); });
+  toast("Sincronizado ☁️","green");
+}
+function subscribeRealtime(){
+  try{
+    sb.channel("app_state_"+SUPA_ROW)
+      .on("postgres_changes",{event:"*",schema:"public",table:"app_state",filter:"id=eq."+SUPA_ROW},payload=>{
+        const d=payload&&payload.new&&payload.new.data;
+        if(d&&!isDirty()){ applyingRemote=true; state=migrate(d); save(); render(); applyingRemote=false; }
+      }).subscribe();
+  }catch(e){}
+}
+function cloudPushDebounced(){
+  if(!cloudReady||applyingRemote)return;
+  setDirty(true);
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(cloudPush,800);
+}
+async function cloudPush(){
+  if(!sb||!cloudReady)return;
+  try{
+    const {error}=await sb.from("app_state").upsert({id:SUPA_ROW,data:state,updated_at:new Date().toISOString()});
+    if(!error)setDirty(false);
+  }catch(e){}
+}
+async function cloudLogout(){
+  try{ if(sb)await sb.auth.signOut(); }catch(e){}
+  cloudReady=false; showLogin();
+}
+cloudInit();
 </script>
 </body>
 </html>
