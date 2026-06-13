@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.2";
+const APP_VERSION="2.3";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1045,6 +1045,27 @@ function receitaAno(year){
   (state.vacacoes||[]).forEach(v=>{if(cobravel(v)&&v.pago){const dt=v.dataPago||v.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].vel+=Number(v.valor)||0;}}});
   return arr;
 }
+/* prévision (forecast) mois par mois sur toute l'année : mensalités + séances + récurrences projetées */
+function projectSerie(se,Y,arr,key){
+  if(!se||!se.desde||se.ativo===false)return;
+  const val=Number(se.valor)||0;if(!val&&key==="perso")return;
+  const dec31=new Date(Y,11,31);let cur=parseYmd(se.desde);
+  const jan1=new Date(Y,0,1);while(cur<jan1)cur.setDate(cur.getDate()+7);
+  while(cur<=dec31){if(cur.getFullYear()===Y)arr[cur.getMonth()][key]+=val;cur.setDate(cur.getDate()+7);}
+}
+function previsaoAno(year){
+  const arr=Array.from({length:12},()=>({perso:0,vel:0}));const Y=Number(year),ys=String(Y);
+  // mensalistes actifs : mensalité chaque mois
+  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{const v=Number(a.mensalidade)||0;for(let m=0;m<12;m++)arr[m].perso+=v;});
+  // séances avulsas one-off (hors série)
+  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.status==="cancelada"||(a.status==="faltou"&&!a.faltaCobrada))return;if((a.data||"").startsWith(ys)){const m=Number(a.data.slice(5,7))-1;if(arr[m])arr[m].perso+=Number(a.valor)||0;}});
+  // vacations Velocity one-off (hors série)
+  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(v.status==="cancelada"||(v.status==="faltou"&&!v.faltaCobrada))return;if((v.data||"").startsWith(ys)){const m=Number(v.data.slice(5,7))-1;if(arr[m])arr[m].vel+=Number(v.valor)||0;}});
+  // récurrences projetées sur toute l'année
+  (state.series||[]).forEach(se=>projectSerie(se,Y,arr,"perso"));
+  (state.velSeries||[]).forEach(se=>projectSerie(se,Y,arr,"vel"));
+  return arr;
+}
 function renderFinanceiro(){
   const el=document.getElementById("page-financeiro");
   if(!ui.finMonth)ui.finMonth=ymNow();
@@ -1070,7 +1091,7 @@ function renderFinanceiro(){
   function linhaAluno(a){
     if(a.tipo==="mensal"){
       const pago=pagoMes(a.id,ym);
-      if(!pago&&isCurrent)aReceber+=Number(a.mensalidade)||0;
+      if(!pago)aReceber+=Number(a.mensalidade)||0;
       let right;
       if(pago)right=`<span class="pa ok">Pago</span><div class="amt">${money(a.mensalidade)}</div>`;
       else if(isCurrent)right=`<span class="pa due">Pendente</span><div class="amt">${money(a.mensalidade)}</div>`;
@@ -1087,7 +1108,7 @@ function renderFinanceiro(){
       const tot=aulasM.reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pagoVal=aulasM.filter(x=>x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pend=tot-pagoVal;
-      if(pend>0&&isCurrent)aReceber+=pend;
+      if(pend>0)aReceber+=pend;
       let right;
       if(aulasM.length===0)right=`<span class="pa neutral">—</span>`;
       else if(pend>0)right=`<span class="pa due">A receber</span><div class="amt">${money(pend)}</div>`;
@@ -1184,11 +1205,11 @@ function renderFinanceiro(){
 
   // gráfico anual
   const year=Number(ym.slice(0,4));
-  const receita=receitaAno(year);
+  const receita=previsaoAno(year);
   const maxR=Math.max(1,...receita.map(r=>r.perso+r.vel));
   const totalAno=receita.reduce((s,r)=>s+r.perso+r.vel,0);
   const curM=Number(ym.slice(5,7))-1;
-  const chartHtml=`<div class="section-title">📈 Ano ${year} <span class="count">${money(totalAno)}</span></div>
+  const chartHtml=`<div class="section-title">📈 Previsão ${year} <span class="count">${money(totalAno)}</span></div>
     <div class="card" style="padding:16px 12px 12px">
       <div class="chart">${receita.map((r,i)=>{
         const hp=Math.round(r.perso/maxR*100),hv=Math.round(r.vel/maxR*100);
@@ -1206,7 +1227,7 @@ function renderFinanceiro(){
   ${chartHtml}
   <div class="summary">
     <div class="sum green"><div class="lbl">Recebido</div><div class="val">${money(recebido)}</div></div>
-    <div class="sum amber"><div class="lbl">${isCurrent?"A receber":"Pendente"}</div><div class="val">${isCurrent?money(aReceber):"—"}</div></div>
+    <div class="sum amber"><div class="lbl">A receber</div><div class="val">${money(aReceber)}</div></div>
     <div class="sum full"><div class="lbl">Líquido (recebido − despesas)</div><div class="val" style="color:${liquido>=0?'var(--green)':'var(--red)'}">${money(liquido)}</div></div>
   </div>
   ${cobrHtml}
