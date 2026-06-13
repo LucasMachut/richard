@@ -1141,6 +1141,7 @@ function renderFinanceiro(){
     <span class="mlabel">${label}</span>
     <button id="mNext">›</button>
   </div>
+  ${chartHtml}
   <div class="summary">
     <div class="sum green"><div class="lbl">Recebido</div><div class="val">${money(recebido)}</div></div>
     <div class="sum amber"><div class="lbl">${isCurrent?"A receber":"Pendente"}</div><div class="val">${isCurrent?money(aReceber):"—"}</div></div>
@@ -1150,7 +1151,6 @@ function renderFinanceiro(){
   <div class="section-title">Alunos em ${MESES[m-1]} <span class="count">${ativos.length}</span></div>
   ${listHtml}
   ${velHtml}
-  ${chartHtml}
   <div class="section-title">Despesas <span class="count" style="color:var(--red)">−${money(despTot)}</span></div>
   ${despMes.map(x=>{const d=parseYmd(x.data);return `<div class="aluno" data-desp="${x.id}">
     <div class="avatar" style="background:var(--red)">−</div>
