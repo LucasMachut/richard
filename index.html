@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.3";
+const APP_VERSION="3.4";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -480,7 +480,7 @@ const TROCA_COR="#64748b"; // cor d'un jour Velocity échangé avec un collègue
 function vacCor(v){return (v&&v.trocada)?TROCA_COR:velCor(v&&v.unidadeId);}
 
 let state=load();
-let ui={tab:"agenda",agendaFilter:"semana",hojeView:"foco",finMonth:null,agendaDay:null};
+let ui={tab:"agenda",agendaFilter:"hoje",hojeView:"foco",finMonth:null,agendaDay:null};
 
 /* migração : completa qualquer backup/estado antigo com os campos novos (chave da atualização sem perder dados) */
 function migrate(s){
