@@ -468,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.4";
+const APP_VERSION="4.5";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -679,7 +679,7 @@ function alunoStatus(a){
   }else{
     // avulso: aulas realizadas não pagas
     const pend=state.aulas.filter(x=>x.alunoId===a.id&&cobravel(x)&&!x.pago);
-    const tot=pend.reduce((s,x)=>s+(Number(x.valor)||0),0);
+    const tot=pend.reduce((s,x)=>s+(Number(x.valor)||Number(a.valorAula)||0),0);
     if(pend.length===0)return{cls:"neutral",txt:"Em dia",amt:""};
     return{cls:"due",txt:pend.length+(pend.length>1?" aulas":" aula"),amt:money(tot)};
   }
@@ -1456,7 +1456,7 @@ function togglePresenca(id,kind){
   const x = kind==="aula" ? state.aulas.find(a=>a.id===id) : (state.vacacoes||[]).find(v=>v.id===id);
   if(!x)return;
   if(x.status==="realizada"){ x.status="agendada"; x.pago=false; mark();render();vibrate();offerUndo(snap,"Presença desfeita","");}
-  else{ x.status="realizada"; if(kind==="aula")x.faltaCobrada=false; mark();render();vibrate();offerUndo(snap,"Presença confirmada ✓","green"); }
+  else{ x.status="realizada"; if(kind==="aula"){x.faltaCobrada=false; const al=aluno(x.alunoId); if(al&&al.tipo==="avulso"&&!x.valor)x.valor=Number(al.valorAula)||0;} mark();render();vibrate();offerUndo(snap,"Presença confirmada ✓","green"); }
 }
 /* tap na ícone de PAGAMENTO : registra ou desfaz (registrar também confirma a presença) */
 function togglePagamento(id,kind){
@@ -1642,7 +1642,7 @@ function openAluno(id){
     body+=`<div class="info-line"><span class="k">${MESES[new Date().getMonth()]}</span><span class="v" style="color:${pagoMes(a.id,ym)?'var(--green)':'var(--amber)'}">${pagoMes(a.id,ym)?"Pago ✓":"Pendente"}</span></div>`;
   }else{
     const pend=state.aulas.filter(x=>x.alunoId===a.id&&cobravel(x)&&!x.pago); // dette réelle : séances FAITES (réalisées / absences facturées) non payées
-    const tot=pend.reduce((s,x)=>s+(Number(x.valor)||0),0);
+    const tot=pend.reduce((s,x)=>s+(Number(x.valor)||Number(a.valorAula)||0),0);
     const agAulas=state.aulas.filter(x=>x.alunoId===a.id&&x.status==="agendada");
     const agVal=agAulas.reduce((s,x)=>s+(Number(x.valor)||Number(a.valorAula)||0),0);
     body+=`<div class="info-line"><span class="k">Valor por aula</span><span class="v">${money(a.valorAula)}</span></div>
