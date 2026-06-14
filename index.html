@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.8";
+const APP_VERSION="2.9";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1245,7 +1245,7 @@ function renderFinanceiro(){
       <div class="summary" style="margin:0 0 ${detalhe?'4px':'12px'}">
         <div class="sum" style="border-color:${uc}33"><div class="lbl" style="color:${uc}">Recebido</div><div class="val" style="color:${uc}">${money(rec)}</div></div>
         <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(ar)}</div></div>
-      </div>${detalhe?`<div class="opt" style="margin:0 4px 12px;font-size:12.5px">↳ ${detalhe}</div>`:""}`;
+      </div>${detalhe?`<div class="opt" style="margin:0 4px ${arReal>0?'8px':'12px'};font-size:12.5px">↳ ${detalhe}</div>`:""}${arReal>0?`<button class="btn" data-velrcv="${u.id}" style="margin:0 0 14px;padding:12px;font-size:14px;background:${uc};color:#fff">✓ Receber tudo do mês · ${money(arReal)}</button>`:""}`;
     list.forEach(v=>{
       const d=parseYmd(v.data);const realizada=v.status==="realizada";let right;
       if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
@@ -1334,6 +1334,7 @@ function renderFinanceiro(){
     } else openAluno(a.id);
   });
   el.querySelectorAll("[data-vacfin]").forEach(c=>c.onclick=()=>openVacacao(c.dataset.vacfin));
+  el.querySelectorAll("[data-velrcv]").forEach(b=>b.onclick=()=>receberMesVelocity(b.dataset.velrcv,ym));
   el.querySelectorAll("[data-desp]").forEach(c=>c.onclick=()=>formDespesa((state.despesas||[]).find(x=>x.id===c.dataset.desp)));
   {const ad=document.getElementById("addDesp");if(ad)ad.onclick=()=>formDespesa(null);}
   el.querySelectorAll("[data-wa]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();cobrar(aluno(b.dataset.wa),b.dataset.watipo,ym);});
@@ -1689,6 +1690,18 @@ function vacacaoAction(id,act){
   if(act==="pago"){v.pago=true;v.dataPago=todayYmd();toast("Recebimento registrado ✓","green");}
   if(act==="naopago"){v.pago=false;v.dataPago=null;}
   mark();closeSheet();render();
+}
+/* Velocity payé en fin de mois (type salaire) : encaisse d'un coup toutes les séances
+   réalisées non payées d'une unité sur le mois affiché, dataPago = dernier jour du mois */
+function receberMesVelocity(unidadeId,ym){
+  const alvo=(state.vacacoes||[]).filter(v=>v.unidadeId===unidadeId&&(v.data||"").startsWith(ym)&&cobravel(v)&&!v.pago);
+  if(!alvo.length){toast("Nada a receber neste mês","amber");return;}
+  const tot=alvo.reduce((s,v)=>s+(Number(v.valor)||0),0);
+  const[Y,M]=ym.split("-").map(Number);
+  if(!confirm(`Receber tudo de ${velNomeFull(unidadeId)} — ${MESES[M-1]} ${Y} ?\n\n${alvo.length} aula(s) · ${money(tot)}`))return;
+  const fimMes=ymdOf(new Date(Y,M,0)); // dernier jour du mois
+  alvo.forEach(v=>{v.pago=true;v.dataPago=fimMes;});
+  mark();render();toast(`${money(tot)} recebido ✓`,"green");
 }
 function formVacacao(existing,pref){
   if(!state.vacacoes)state.vacacoes=[];
