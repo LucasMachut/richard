@@ -143,13 +143,17 @@
   .aula .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .aula .meta{font-size:12.5px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .aula-loc{font-size:12px;color:var(--ink-faint);margin-top:4px;display:flex;align-items:center;gap:4px}
-  /* badge de statut en coin bas-droite (✓ réalisée · ⊘ anulada · ✕ faltou · ? por confirmar) */
-  .ev-canto{position:absolute;right:8px;bottom:8px;min-width:20px;height:20px;padding:0 4px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;line-height:1;box-shadow:0 1px 5px rgba(0,0,0,.4);z-index:3}
-  .ev-canto.ok{background:var(--green);color:#06210f}
-  .ev-canto.no{background:var(--red);color:#fff}
-  .ev-canto.cancel{background:var(--ink-faint);color:#fff}
-  .ev-canto.ask{background:var(--amber);color:#241700}
-  .tl-ev .ev-canto{width:16px;height:16px;min-width:16px;font-size:10px;right:3px;bottom:3px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  /* 2 icônes de statut au coin bas-droite : présence (✓/✕/?/⊘) + paiement ($) */
+  .ic-pair{position:absolute;right:8px;bottom:8px;display:flex;gap:4px;z-index:3}
+  .ic{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;line-height:1;box-shadow:0 1px 5px rgba(0,0,0,.4)}
+  .ic.ok{background:var(--green);color:#06210f}
+  .ic.no{background:var(--red);color:#fff}
+  .ic.cancel{background:var(--ink-faint);color:#fff}
+  .ic.wait{background:var(--surface-2);color:var(--ink-faint);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+  .tl-ev .ic-pair{right:3px;bottom:3px;gap:3px}
+  .tl-ev .ic{width:15px;height:15px;font-size:9px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .tl-ev .ic.wait{box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .ld-card .ic-pair{position:static;flex:0 0 auto}
   .aula.evento .bar{opacity:.85;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.5) 0 3px,transparent 3px 6px)}
   .st.evento-tag{background:#eef1f6;color:var(--ink-soft)}
   .ev-sub{font-size:11.5px;color:var(--ink-faint);font-weight:600;display:inline-flex;align-items:center;gap:3px}
@@ -461,7 +465,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.8";
+const APP_VERSION="3.9";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -760,10 +764,11 @@ function hojeSessions(ymd){
   return dayItems(ymd).filter(it=>it.k==="aula"||it.k==="vacacao").map(it=>{
     const start=minOf(it.r.hora);const dur=Number(it.r.dur)||60;
     let nome,sub,cor,tipo,valor=Number(it.r.valor)||0,pago=!!it.r.pago,status=it.r.status||"agendada";
+    let payState;
     if(it.k==="aula"){const al=aluno(it.r.alunoId);if(!al)return null;nome=al.nome;cor=al.cor;tipo=al.tipo;
-      sub=(al.tipo==="mensal"?"Personal":"Avulso")+(it.r.local?" · "+it.r.local:"");}
-    else{nome=velNomeFull(it.r.unidadeId);cor=vacCor(it.r);tipo="velocity";sub=it.r.trocada?"🔄 Troca com colega":(it.r.local||"");}
-    return {k:it.k,id:it.r.id,start,dur,hora:it.r.hora,nome,sub,cor,tipo,valor,pago,status};
+      sub=(al.tipo==="mensal"?"Personal":"Avulso")+(it.r.local?" · "+it.r.local:"");payState=payStateAula(it.r);}
+    else{nome=velNomeFull(it.r.unidadeId);cor=vacCor(it.r);tipo="velocity";sub=it.r.trocada?"🔄 Troca com colega":(it.r.local||"");payState=payStateVac(it.r);}
+    return {k:it.k,id:it.r.id,start,dur,hora:it.r.hora,nome,sub,cor,tipo,valor,pago,status,payState};
   }).filter(x=>x&&x.start!=null).sort((a,b)=>a.start-b.start);
 }
 function sessPill(x){
@@ -825,14 +830,7 @@ function ldAgora(now){
 function ldRow(s,isNext,quick){
   const done=s.status==="realizada"||s.status==="faltou"||s.status==="cancelada";
   const da=s.k==="aula"?`data-aula="${s.id}"`:s.k==="vacacao"?`data-vacacao="${s.id}"`:`data-evento="${s.id}"`;
-  let right="";
-  if(s.tipo==="evento")right="";
-  else if(s.status==="realizada")right=`<span class="ld-check">✓</span>`;
-  else if(s.status==="faltou")right=`<span class="st faltou">Faltou</span>`;
-  else if(s.status==="cancelada")right=`<span class="st cancelada">Cancelada</span>`;
-  else if(s.tipo==="velocity")right="";
-  else if(s.tipo==="mensal")right=`<span class="tag-pago" style="background:var(--brand-soft);color:var(--brand)">Mensal</span>`;
-  else right=s.pago?`<span class="tag-pago">${money(s.valor)}</span>`:`<span class="tag-arec" style="background:var(--amber-soft);color:var(--amber)">${money(s.valor)}</span>`;
+  const right = s.tipo==="evento" ? "" : statusIcones(s.status, s.payState||"wait");
   // ✓ rapide (1 tap = concluída, + pagamento si avulso) — n'ouvre pas la feuille
   const qbtn=(quick&&!done&&s.tipo!=="evento")
     ? `<button class="ld-quick" data-quickdone="${s.id}" data-qk="${s.k}" title="Concluir" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--green-soft);color:var(--green);font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1px solid rgba(47,230,166,.32);margin-left:8px">✓</button>`
@@ -956,7 +954,7 @@ function renderDay(el){
        style="top:${top}px;height:${hgt}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);background:${x.color}">
        <div class="t1">${esc(x.title)}</div>
        ${compact?"":`<div class="t2">${fmtMin(x.start)}–${fmtMin(x.end)}${x.local?" · "+esc(x.local):""}</div>`}
-       ${x.kind!=="evento"?cantoStatus(x.status, ymd<today||(ymd===today&&x.end<=nowMinutes())):""}
+       ${x.kind!=="evento"?statusIcones(x.status, x.kind==="aula"?payStateAula(state.aulas.find(a=>a.id===x.id)||{}):payStateVac((state.vacacoes||[]).find(v=>v.id===x.id)||{})):""}
      </div>`;
   });
 
@@ -996,49 +994,48 @@ function eventoCard(e){
     </div>
   </div>`;
 }
+/* 2 icônes : présence (status) + paiement (payState : ok/due/wait) */
+function statusIcones(status,payState){
+  let p;
+  if(status==="realizada")p='<span class="ic ok" title="Aconteceu">✓</span>';
+  else if(status==="faltou")p='<span class="ic no" title="Faltou">✕</span>';
+  else if(status==="cancelada")p='<span class="ic cancel" title="Cancelada">⊘</span>';
+  else p='<span class="ic wait" title="A confirmar">?</span>';
+  let m;
+  if(payState==="ok")m='<span class="ic ok" title="Pago">$</span>';
+  else if(payState==="due")m='<span class="ic no" title="A receber">$</span>';
+  else m='<span class="ic wait" title="A pagar">$</span>';
+  return `<span class="ic-pair">${p}${m}</span>`;
+}
+function payStateAula(a){const al=aluno(a.alunoId);if(al&&al.tipo==="mensal")return pagoMes(al.id,(a.data||"").slice(0,7))?"ok":"wait";if(a.pago)return "ok";if(cobravel(a))return "due";return "wait";}
+function payStateVac(v){if(v.pago)return "ok";if(cobravel(v))return "due";return "wait";}
 function vacacaoCard(v){
   const nome=velNomeFull(v.unidadeId);const vc=vacCor(v);
-  const stLabel={agendada:"Agendada",realizada:"Realizada",faltou:"Faltou",cancelada:"Cancelada"}[v.status||"agendada"];
-  let tag;
-  if(cobravel(v))tag=v.pago?'<span class="tag-pago">PAGO</span>':'<span class="tag-arec">A RECEBER</span>';
-  else tag=`<span class="tag-avulso" style="background:${vc}28;color:${vc}">VELOCITY</span>`;
+  const meta=`${v.trocada?'<span class="ev-sub" style="color:'+TROCA_COR+'">🔄 troca</span>':''}${v.serieId?' <span class="ev-sub">🔁 fixo</span>':''}`.trim();
   return `<div class="aula vacacao" data-vacacao="${v.id}">
     <div class="time">${v.hora||"–"}</div>
     <div class="bar" style="background:${vc}"></div>
     <div class="body">
       <div class="nm">${esc(nome)}</div>
-      <div class="meta"><span class="st ${v.status||'agendada'}">${stLabel}</span> ${tag} ${v.trocada?'<span class="ev-sub" style="color:'+TROCA_COR+'">🔄 troca</span>':''} ${v.serieId?'<span class="ev-sub">🔁 fixo</span>':''}</div>
+      ${meta?`<div class="meta">${meta}</div>`:""}
       ${v.local?`<div class="aula-loc">📍 ${esc(v.local)}</div>`:""}
     </div>
-    ${cantoStatus(v.status,eventoEnded(v.data,v.hora,v.dur))}
+    ${statusIcones(v.status,payStateVac(v))}
   </div>`;
-}
-function eventoEnded(ymd,hora,dur){const t=todayYmd();if(ymd<t)return true;if(ymd>t)return false;return (minOf(hora)||0)+(Number(dur)||60)<=nowMinutes();}
-function cantoStatus(status,ended){
-  if(status==="realizada")return `<span class="ev-canto ok">✓</span>`;
-  if(status==="faltou")return `<span class="ev-canto no">✕</span>`;
-  if(status==="cancelada")return `<span class="ev-canto cancel">⊘</span>`;
-  if((!status||status==="agendada")&&ended)return `<span class="ev-canto ask">?</span>`;
-  return "";
 }
 function aulaCard(a){
   const al=aluno(a.alunoId);if(!al)return"";
-  let tag="";
-  if(al.tipo==="avulso"){
-    if(cobravel(a))tag=a.pago?'<span class="tag-pago">PAGO</span>':'<span class="tag-arec">A RECEBER</span>';
-    else tag='<span class="tag-avulso">AVULSO</span>';
-  }
-  const stLabel={agendada:"Agendada",realizada:"Realizada",faltou:"Faltou",cancelada:"Cancelada"}[a.status];
   const remarc=(a.historico&&a.historico.length)?'<span class="tag-remarc">↪ remarcada</span>':'';
+  const meta=`${remarc}${a.serieId?' <span class="ev-sub">🔁 fixo</span>':''}`.trim();
   return `<div class="aula" data-aula="${a.id}">
     <div class="time">${a.hora}</div>
     <div class="bar" style="background:${al.cor}"></div>
     <div class="body">
       <div class="nm">${esc(al.nome)}</div>
-      <div class="meta"><span class="st ${a.status}">${stLabel}</span> ${tag} ${remarc} ${a.serieId?'<span class="ev-sub">🔁 fixo</span>':''}</div>
+      ${meta?`<div class="meta">${meta}</div>`:""}
       ${a.local?`<div class="aula-loc">📍 ${esc(a.local)}</div>`:""}
     </div>
-    ${cantoStatus(a.status,eventoEnded(a.data,a.hora,a.dur))}
+    ${statusIcones(a.status,payStateAula(a))}
   </div>`;
 }
 
