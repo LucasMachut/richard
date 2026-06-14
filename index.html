@@ -468,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.2";
+const APP_VERSION="4.3";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1231,22 +1231,23 @@ function renderFinanceiro(){
       const aulasM=aulasAvulsoMes(a.id,ym);
       const pend=aulasM.reduce((s,x)=>s+(x.pago?0:(Number(x.valor)||0)),0);
       const n=aulasM.filter(x=>!x.pago).length;
-      if(pend>0)cobrancas.push({a,tipo:"avulso",val:pend,n,atraso:0});
+      if(pend>0){const venc=Number(a.venc)||0;const dias=venc?diaHoje-venc:0;cobrancas.push({a,tipo:"avulso",val:pend,n,atraso:dias>0?dias:0,venceEm:(venc&&dias<0)?(venc-diaHoje):null});}
     });
     cobrancas.sort((x,y)=>y.atraso-x.atraso||y.val-x.val);
     if(cobrancas.length){
       cobrHtml=`<div class="section-title">⚠️ Cobranças <span class="count">${cobrancas.length}</span></div>`;
       cobrancas.forEach(c=>{
+        const prazo = c.atraso>0 ? `<span class="cobr-late">Atrasado há ${c.atraso} dia${c.atraso>1?"s":""}</span>` : (c.venceEm!=null ? `<span class="cobr-soon">Vence em ${c.venceEm} dia${c.venceEm>1?"s":""}</span>` : "");
         let meta;
-        if(c.tipo==="mensal"){
-          if(c.atraso>0)meta=`<span class="cobr-late">Atrasado há ${c.atraso} dia${c.atraso>1?"s":""}</span>`;
-          else if(c.venceEm!=null)meta=`<span class="cobr-soon">Vence em ${c.venceEm} dia${c.venceEm>1?"s":""}</span>`;
-          else meta=`Mensalidade pendente`;
-        }else meta=`${c.n} aula(s) em aberto`;
+        if(c.tipo==="mensal") meta = prazo || "Mensalidade pendente";
+        else meta = (prazo?prazo+" · ":"") + `${c.n} aula(s)`;
         cobrHtml+=`<div class="aluno" data-cobr="${c.a.id}" data-ctipo="${c.tipo}">
           <div class="avatar" style="background:${c.a.cor}">${initials(c.a.nome)}</div>
           <div class="body"><div class="nm">${esc(c.a.nome)}</div><div class="meta">${meta} · ${money(c.val)}</div></div>
-          <button class="btn-wa" data-wa="${c.a.id}" data-watipo="${c.tipo}">✆ Cobrar</button>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+            <button class="btn-wa" style="background:var(--green-soft);color:var(--green)" data-receb="${c.a.id}" data-rtipo="${c.tipo}">✓ Recebi</button>
+            <button class="btn-wa" data-wa="${c.a.id}" data-watipo="${c.tipo}">✆ Cobrar</button>
+          </div>
         </div>`;
       });
     }
@@ -1370,6 +1371,7 @@ function renderFinanceiro(){
   el.querySelectorAll("[data-desp]").forEach(c=>c.onclick=()=>formDespesa((state.despesas||[]).find(x=>x.id===c.dataset.desp)));
   {const ad=document.getElementById("addDesp");if(ad)ad.onclick=()=>formDespesa(null);}
   el.querySelectorAll("[data-wa]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();cobrar(aluno(b.dataset.wa),b.dataset.watipo,ym);});
+  el.querySelectorAll("[data-receb]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();const a=aluno(b.dataset.receb);if(b.dataset.rtipo==="mensal")confirmPagarMensal(a,ym);else pedirData("Recebi de "+a.nome,todayYmd(),dt=>receberAvulsoMes(a.id,ym,dt));});
   el.querySelectorAll("[data-cobr]").forEach(c=>c.onclick=()=>{
     const a=aluno(c.dataset.cobr);
     if(c.dataset.ctipo==="mensal")confirmPagarMensal(a,ym);
@@ -1828,7 +1830,8 @@ function formAluno(existing){
       ? `<div class="frow"><div class="fld"><label>Mensalidade (R$)</label><input id="fMens" inputmode="decimal" value="${draft.mensalidade||""}" placeholder="480"></div>
          <div class="fld"><label>Vence dia</label><input id="fVenc" inputmode="numeric" value="${draft.venc||""}" placeholder="5"></div></div>
          <div class="fld"><label>Aulas no plano / mês <span class="opt">(opcional)</span></label><input id="fPlano" inputmode="numeric" value="${draft.aulasPlano||""}" placeholder="Ex: 8 — deixe vazio se ilimitado"></div>`
-      : `<div class="fld"><label>Valor por aula (R$)</label><input id="fVal" inputmode="decimal" value="${draft.valorAula||""}" placeholder="90"></div>`;
+      : `<div class="frow"><div class="fld"><label>Valor por aula (R$)</label><input id="fVal" inputmode="decimal" value="${draft.valorAula||""}" placeholder="90"></div>
+         <div class="fld"><label>Vence dia <span class="opt">(opc.)</span></label><input id="fVencA" inputmode="numeric" value="${draft.venc||""}" placeholder="ex: 5"></div></div>`;
   };
   renderTipoFields();
   const sb=document.getElementById("sheetBody");
@@ -1841,7 +1844,7 @@ function formAluno(existing){
     draft.tel=document.getElementById("fTel").value.trim();
     draft.local=document.getElementById("fLocal").value.trim();
     if(draft.tipo==="mensal"){draft.mensalidade=Number(document.getElementById("fMens").value)||0;draft.venc=Number(document.getElementById("fVenc").value)||0;draft.aulasPlano=Number(document.getElementById("fPlano").value)||0;draft.valorAula=0;}
-    else{draft.valorAula=Number(document.getElementById("fVal").value)||0;draft.mensalidade=0;}
+    else{draft.valorAula=Number(document.getElementById("fVal").value)||0;draft.venc=Number(document.getElementById("fVencA").value)||0;draft.mensalidade=0;}
     const idx=state.alunos.findIndex(a=>a.id===draft.id);
     if(idx>=0)state.alunos[idx]=draft;else state.alunos.push(draft);
     mark();closeSheet();ui.tab="alunos";setTab("alunos");render();toast(existing?"Aluno salvo ✓":"Aluno cadastrado ✓","green");
@@ -1913,6 +1916,15 @@ function receberMesVelocity(unidadeId,ym){
   const fimMes=ymdOf(new Date(Y,M,0)); // dernier jour du mois
   const snap=snapState();
   alvo.forEach(v=>{v.pago=true;v.dataPago=fimMes;});
+  mark();render();vibrate(20);offerUndo(snap,`${money(tot)} recebido ✓`,"green");
+}
+/* encaisse toutes les séances avulso faites non payées du mois, à une date donnée */
+function receberAvulsoMes(alunoId,ym,dataPg){
+  const alvo=aulasAvulsoMes(alunoId,ym).filter(x=>!x.pago);
+  if(!alvo.length){toast("Nada a receber","amber");return;}
+  const tot=alvo.reduce((s,x)=>s+(Number(x.valor)||0),0);
+  const snap=snapState();
+  alvo.forEach(x=>{x.pago=true;x.dataPago=dataPg||todayYmd();});
   mark();render();vibrate(20);offerUndo(snap,`${money(tot)} recebido ✓`,"green");
 }
 function formVacacao(existing,pref){
