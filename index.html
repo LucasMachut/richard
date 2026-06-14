@@ -468,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.3";
+const APP_VERSION="4.4";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1431,13 +1431,13 @@ function pedirData(titulo,dataIni,cb){
   setTimeout(()=>{try{inp.focus();}catch(e){}},150);
   document.getElementById("vdOk").onclick=()=>{const v=inp.value||dataIni||todayYmd();closeSheet();cb(v);};
 }
-/* geste rapide : 1 tap = aula concluída (+ pagamento si avulso à tarif connu) */
+/* geste rapide : 1 tap = aula concluída. Pagamento = 2º gesto (toque no $) → fica em « A receber ». */
 function quickDone(id,kind){
   const snap=snapState();
   if(kind==="aula"){
     const a=state.aulas.find(x=>x.id===id);if(!a)return;const al=aluno(a.alunoId);
     a.status="realizada";a.faltaCobrada=false;let msg="Presença confirmada ✓";
-    if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0){a.valor=val;a.pago=true;a.dataPago=todayYmd();msg="Presença + "+money(val)+" recebido ✓";}}
+    if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0)a.valor=val;} // chiffre la dette, ne paie pas
     mark();render();vibrate();offerUndo(snap,msg,"green");
   }else{
     const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
@@ -1518,7 +1518,7 @@ function abrirConfirmar(incluiHoje){
   document.getElementById("cfAllOk").onclick=()=>{
     const snap=snapState();
     pend.forEach(p=>{
-      if(p.k==="aula"){const a=state.aulas.find(x=>x.id===p.id);if(!a)return;const al=aluno(a.alunoId);a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0){a.valor=val;a.pago=true;a.dataPago=todayYmd();}}}
+      if(p.k==="aula"){const a=state.aulas.find(x=>x.id===p.id);if(!a)return;const al=aluno(a.alunoId);a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0)a.valor=val;}}
       else{const v=(state.vacacoes||[]).find(x=>x.id===p.id);if(v)v.status="realizada";}
     });
     mark();closeSheet();render();vibrate(25);offerUndo(snap,pend.length+" sessões concluídas ✓","green");
