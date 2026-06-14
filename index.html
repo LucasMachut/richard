@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.0";
+const APP_VERSION="3.1";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -464,6 +464,7 @@ let sb=null, cloudReady=false, pushTimer=null, applyingRemote=false;
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const DIAS=["dom","seg","ter","qua","qui","sex","sáb"];
+const DIAS_LG=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 const CORES=["#16D1FF","#3b82f6","#0ea5e9","#6366f1","#14b8a6","#8b5cf6","#f59e0b","#ef4444"];
 const VEL_COR="#8b5cf6"; // cor padrão (fallback) das vacações Velocity
 const VEL_CORES=["#8b5cf6","#ec4899","#22c55e","#f59e0b","#06b6d4","#ef4444"]; // paleta p/ unidades
@@ -640,7 +641,9 @@ function ensureVelSerie(serie){
 function topUpVelSeries(){if(!state.velSeries)return;let n=(state.vacacoes||[]).length;state.velSeries.forEach(ensureVelSerie);if((state.vacacoes||[]).length!==n)save();}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function initials(n){return n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();}
-function fmtDH(data,hora){const d=parseYmd(data);return `${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} ${hora||""}`.trim();}
+function mesAbrev(m){const s=MESES[m].slice(0,3);return s.charAt(0).toUpperCase()+s.slice(1);}
+function dataSem(d){return `${DIAS_LG[d.getDay()]} ${d.getDate()} ${mesAbrev(d.getMonth())}`;} // "Sexta 5 Jun"
+function fmtDH(data,hora){const d=parseYmd(data);return `${dataSem(d)} ${hora||""}`.trim();}
 /* uma aula/vacação é "cobrável" se foi realizada OU se foi falta cobrada */
 function cobravel(x){return x.status==="realizada"||(x.status==="faltou"&&x.faltaCobrada);}
 function anualStats(a,ano){
@@ -1266,7 +1269,7 @@ function renderFinanceiro(){
       else right=`<span class="pa due">A receber</span>`;
       velHtml+=`<div class="aluno" data-vacfin="${v.id}">
         <div class="avatar" style="background:${uc}">${esc(((u.nome||"V")[0]||"V").toUpperCase())}</div>
-        <div class="body"><div class="nm">${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} · ${v.hora}</div><div class="meta">${esc(uNome)}${v.local?" · "+esc(v.local):""}</div></div>
+        <div class="body"><div class="nm">${dataSem(d)} · ${v.hora}</div><div class="meta">${esc(uNome)}${v.local?" · "+esc(v.local):""}</div></div>
         <div class="pay-state">${right}</div></div>`;
     });
   });
@@ -1311,7 +1314,7 @@ function renderFinanceiro(){
   <div class="section-title">Despesas <span class="count" style="color:var(--red)">−${money(despTot)}</span></div>
   ${despMes.map(x=>{const d=parseYmd(x.data);return `<div class="aluno" data-desp="${x.id}">
     <div class="avatar" style="background:var(--red)">−</div>
-    <div class="body"><div class="nm">${esc(x.descricao||"Despesa")}</div><div class="meta">${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}${x.categoria?" · "+esc(x.categoria):""}</div></div>
+    <div class="body"><div class="nm">${esc(x.descricao||"Despesa")}</div><div class="meta">${dataSem(d)}${x.categoria?" · "+esc(x.categoria):""}</div></div>
     <div class="pay-state"><div class="amt" style="color:var(--red)">−${money(x.valor)}</div></div></div>`;}).join("")}
   <button class="btn btn-ghost" id="addDesp" style="margin-top:4px">＋ Nova despesa</button>`;
 
@@ -1439,7 +1442,7 @@ function abrirConfirmar(incluiHoje){
     let nome,cor;
     if(p.k==="aula"){const a=state.aulas.find(x=>x.id===p.id);const al=aluno(a.alunoId);nome=al?al.nome:"?";cor=al?al.cor:"#888";}
     else{const v=(state.vacacoes||[]).find(x=>x.id===p.id);nome=velNomeFull(v.unidadeId);cor=vacCor(v);}
-    const d=parseYmd(p.data);const quando=`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} · ${p.hora}`;
+    const d=parseYmd(p.data);const quando=`${dataSem(d)} · ${p.hora}`;
     body+=`<div class="aluno" style="gap:10px;padding:11px 13px">
       <div class="avatar" style="width:36px;height:36px;font-size:15px;background:${cor}">${esc((nome.trim()[0]||"?").toUpperCase())}</div>
       <div class="body"><div class="nm" style="font-size:15px">${esc(nome)}</div><div class="meta">${quando}</div></div>
@@ -1466,7 +1469,7 @@ function openAula(id){
   const a=state.aulas.find(x=>x.id===id);if(!a)return;
   const al=aluno(a.alunoId);
   const d=parseYmd(a.data);
-  const dateStr=`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${a.hora}`;
+  const dateStr=`${DIAS_LG[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${a.hora}`;
   let body=`<div class="hint" style="margin:0 0 16px;font-size:14px;color:var(--ink-soft)">
      <b style="color:var(--ink)">${esc(al?al.nome:"?")}</b> · ${dateStr}${a.local?`<br>📍 ${esc(a.local)}`:""}</div>`;
 
@@ -1763,7 +1766,7 @@ function openVacacao(id){
   const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
   const nome=velNomeFull(v.unidadeId);
   const d=parseYmd(v.data);
-  const dateStr=`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${v.hora}`;
+  const dateStr=`${DIAS_LG[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${v.hora}`;
   let body=`<div class="hint" style="margin:0 0 16px;font-size:14px;color:var(--ink-soft)">
      <b style="color:var(--ink)">${esc(nome)}</b> · ${dateStr}${v.local?`<br>📍 ${esc(v.local)}`:""}${Number(v.valor)>0?`<br>Valor: <b style="color:var(--ink)">${money(v.valor)}</b>`:""}</div>`;
   if(v.status!=="realizada")body+=`<div class="act green" data-vac="realizada"><div class="ai">✓</div><div><div>Marcar como realizada</div></div></div>`;
@@ -1958,7 +1961,7 @@ const EVCOR=["#94a3b8","#16c098","#3b82f6","#8b5cf6","#f59e0b","#ef4444"];
 function openEvento(id){
   const e=(state.eventos||[]).find(x=>x.id===id);if(!e)return;
   const d=parseYmd(e.data);
-  const quando=`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${e.hora||""}${e.horaFim?" – "+e.horaFim:""}`;
+  const quando=`${DIAS_LG[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${e.hora||""}${e.horaFim?" – "+e.horaFim:""}`;
   let body=`<div class="hint" style="margin:0 0 16px;font-size:14px;color:var(--ink-soft)">${quando}</div>`;
   if(e.local||e.nota){
     body+=`<div class="card" style="padding:4px 16px;margin-bottom:14px">`;
