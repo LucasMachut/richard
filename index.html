@@ -1234,14 +1234,18 @@ function renderFinanceiro(){
     const list=(state.vacacoes||[]).filter(v=>v.unidadeId===u.id&&(v.data||"").startsWith(ym)).sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
     const rec=recVel[u.id]||0;const ar=arVelU[u.id]||0;
     if(rec<=0&&ar<=0&&!list.length)return; // rien ce mois pour cette unité
-    // « A receber » = dette réelle (séances faites, non payées) ; « Previsto » = séances encore à réaliser (agendadas)
-    const arReal=list.filter(x=>cobravel(x)&&!x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0);
-    const previsto=Math.max(0,ar-arReal);
+    // « A receber » = total dû du mois (cohérent avec le total en haut) ; détaillé dette réelle vs prévu
+    const arReal=list.filter(x=>cobravel(x)&&!x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0); // séances faites, non payées
+    const previsto=Math.max(0,ar-arReal); // séances encore à réaliser (agendadas)
+    const nAgd=list.filter(x=>x.status==="agendada").length;
+    const detalhe = previsto>0 ? (arReal>0
+        ? `${money(arReal)} a cobrar · ${money(previsto)} previsto (${nAgd} agendada${nAgd>1?'s':''})`
+        : `${money(previsto)} previsto · ${nAgd} agendada${nAgd>1?'s':''} ainda não realizada${nAgd>1?'s':''}`) : "";
     velHtml+=`<div class="section-title"><span style="color:${uc}">🟣 ${esc(uNome)}</span> ${list.length?`<span class="count">${list.length}</span>`:""}</div>
-      <div class="summary" style="margin:0 0 ${previsto>0?'4px':'12px'}">
+      <div class="summary" style="margin:0 0 ${detalhe?'4px':'12px'}">
         <div class="sum" style="border-color:${uc}33"><div class="lbl" style="color:${uc}">Recebido</div><div class="val" style="color:${uc}">${money(rec)}</div></div>
-        <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(arReal)}</div></div>
-      </div>${previsto>0?`<div class="opt" style="margin:0 4px 12px;font-size:12.5px">+ ${money(previsto)} previsto · ${list.filter(x=>x.status==="agendada").length} agendada(s) ainda não realizada(s)</div>`:""}`;
+        <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(ar)}</div></div>
+      </div>${detalhe?`<div class="opt" style="margin:0 4px 12px;font-size:12.5px">↳ ${detalhe}</div>`:""}`;
     list.forEach(v=>{
       const d=parseYmd(v.data);const realizada=v.status==="realizada";let right;
       if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
