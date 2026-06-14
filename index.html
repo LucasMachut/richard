@@ -461,7 +461,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.7";
+const APP_VERSION="3.8";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1511,12 +1511,15 @@ function openAula(id){
   if(a.status!=="cancelada")
     body+=`<div class="act grey" data-act="cancelada"><div class="ai">🚫</div><div><div>Cancelar aula</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
 
-  // avulso: toggle pago
-  if(al&&al.tipo==="avulso"&&cobravel(a)){
+  // pagamento (avulso) — SEMPRE visível ; registrar pagamento também confirma a presença
+  if(al&&al.tipo==="avulso"){
+    const valShow=Number(a.valor)||Number(al.valorAula)||0;
     body+=`<div class="grp-lbl">Pagamento</div>`;
     body+=a.pago
       ? `<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div><div class="sub">${money(a.valor)}</div></div></div>`
-      : `<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(a.valor)}</div></div></div>`;
+      : `<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(valShow)}${!cobravel(a)?" · confirma a presença":""}</div></div></div>`;
+  }else if(al&&al.tipo==="mensal"){
+    body+=`<div class="grp-lbl">Pagamento</div><div class="hint" style="margin:0 0 9px">Mensalidade — registrada no <b style="color:var(--ink)">Financeiro</b>.</div>`;
   }
   let mais=`<div class="act blue" data-act="editar"><div class="ai">✎</div><div><div>Editar / remarcar</div><div class="sub">Mudar data, hora ou valor</div></div></div>`;
   if(a.status!=="agendada")
@@ -1557,8 +1560,10 @@ function aulaAction(id,act){
   if(act==="cancelada"){a.status="cancelada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Aula cancelada","");return;}
   if(act==="agendada"){a.status="agendada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
   if(act==="pago"){
-    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;a.pago=true;a.dataPago=todayYmd();mark();render();offerUndo(snap,money(a.valor)+" recebido ✓","green");});return;}
-    a.pago=true;a.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,money(a.valor)+" recebido ✓","green");return;
+    const confirmou=!cobravel(a); // pagar também confirma a presença
+    const finish=()=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
+    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;finish();});return;}
+    finish();return;
   }
   if(act==="naopago"){a.pago=false;a.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não pago","");return;}
 }
@@ -1811,12 +1816,10 @@ function openVacacao(id){
   if(v.status!=="realizada")body+=`<div class="act green" data-vac="realizada"><div class="ai">✓</div><div><div>Marcar como realizada</div></div></div>`;
   if(v.status!=="faltou")body+=`<div class="act red" data-vac="faltou"><div class="ai">✕</div><div><div>Não rolou / faltou</div></div></div>`;
   if(v.status!=="cancelada")body+=`<div class="act grey" data-vac="cancelada"><div class="ai">🚫</div><div><div>Cancelar vacação</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
-  if(cobravel(v)){
-    body+=`<div class="grp-lbl">Pagamento <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-faint)">· normalmente no fim do mês</span></div>`;
-    body+=v.pago
-      ? `<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div><div class="sub">${money(v.valor)}</div></div></div>`
-      : `<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}</div></div></div>`;
-  }
+  body+=`<div class="grp-lbl">Pagamento <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-faint)">· normalmente no fim do mês</span></div>`;
+  body+=v.pago
+    ? `<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div><div class="sub">${money(v.valor)}</div></div></div>`
+    : `<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}${!cobravel(v)?" · confirma a presença":""}</div></div></div>`;
   let mais=`<div class="act" data-vac="trocar" style="background:rgba(100,116,139,.16);border-color:transparent"><div class="ai" style="background:rgba(100,116,139,.28);color:#94a3b8">🔄</div><div><div>${v.trocada?"Desfazer troca":"Trocar com colega"}</div><div class="sub">${v.trocada?"Volta para Velocity normal":"Marca o dia como trocado (outra cor)"}</div></div></div>`;
   mais+=`<div class="act blue" data-vac="editar"><div class="ai">✎</div><div><div>Editar vacação</div></div></div>`;
   if(v.serieId)mais+=`<div class="act grey" data-vac="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar esta Velocity fixa</div></div></div>`;
@@ -1848,7 +1851,7 @@ function vacacaoAction(id,act){
   if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
   if(act==="cancelada"){v.status="cancelada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Vacação cancelada","");return;}
   if(act==="agendada"){v.status="agendada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
-  if(act==="pago"){v.pago=true;v.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,money(v.valor)+" recebido ✓","green");return;}
+  if(act==="pago"){const confirmou=!cobravel(v);if(confirmou)v.status="realizada";v.pago=true;v.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");return;}
   if(act==="naopago"){v.pago=false;v.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não recebido","");return;}
 }
 /* Velocity payé en fin de mois (type salaire) : encaisse d'un coup toutes les séances
