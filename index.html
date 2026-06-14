@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.2";
+const APP_VERSION="3.3";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1488,6 +1488,8 @@ function openAula(id){
     body+=`<div class="act green" data-act="realizada"><div class="ai">✓</div><div><div>Marcar como realizada</div></div></div>`;
   if(a.status!=="faltou")
     body+=`<div class="act red" data-act="faltou"><div class="ai">✕</div><div><div>Aluno faltou</div></div></div>`;
+  if(a.status!=="cancelada")
+    body+=`<div class="act grey" data-act="cancelada"><div class="ai">🚫</div><div><div>Cancelar aula</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
 
   // avulso: toggle pago
   if(al&&al.tipo==="avulso"&&cobravel(a)){
@@ -1495,7 +1497,7 @@ function openAula(id){
       ? `<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div><div class="sub">${money(a.valor)}</div></div></div>`
       : `<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(a.valor)}</div></div></div>`;
   }
-  let mais=`<div class="act blue" data-act="editar"><div class="ai">✎</div><div><div>Editar aula</div></div></div>`;
+  let mais=`<div class="act blue" data-act="editar"><div class="ai">✎</div><div><div>Editar / remarcar</div><div class="sub">Mudar data, hora ou valor</div></div></div>`;
   if(a.status!=="agendada")
     mais+=`<div class="act grey" data-act="agendada"><div class="ai">↺</div><div><div>Voltar para agendada</div></div></div>`;
   if(a.serieId)
@@ -1531,6 +1533,7 @@ function aulaAction(id,act){
     mark();closeSheet();render();offerUndo(snap,"Aula concluída ✓","green");return;
   }
   if(act==="faltou"){a.status="faltou";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=Number(al.valorAula)||0;a.faltaCobrada=confirm("Cobrar esta falta mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
+  if(act==="cancelada"){a.status="cancelada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Aula cancelada","");return;}
   if(act==="agendada"){a.status="agendada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
   if(act==="pago"){
     if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;a.pago=true;a.dataPago=todayYmd();mark();render();offerUndo(snap,money(a.valor)+" recebido ✓","green");});return;}
@@ -1636,9 +1639,9 @@ function openHistAluno(a){
     const stLabel={agendada:"Agendada",realizada:"Realizada",faltou:"Faltou",cancelada:"Cancelada"}[x.status]||x.status;
     const cobr=x.status==="faltou"&&x.faltaCobrada?' <span class="tag-arec">cobrada</span>':'';
     const val=a.tipo==="avulso"?`<span class="ev-sub">${money(x.valor)}${x.pago?" ✓":""}</span>`:"";
-    return `<div class="depois-row"><div class="dtime" style="width:62px">${DIAS_LG[d.getDay()].slice(0,3)} ${d.getDate()}</div>
+    return `<div class="depois-row" data-histaula="${x.id}"><div class="dtime" style="width:62px">${DIAS_LG[d.getDay()].slice(0,3)} ${d.getDate()}</div>
       <div class="dbody"><div class="dnm" style="font-size:14px;font-weight:700">${x.hora} · <span class="st ${x.status}">${stLabel}</span>${cobr}</div><div class="dmeta">${x.local?esc(x.local):"—"}</div></div>
-      ${val}</div>`;
+      ${val}<span style="color:var(--ink-faint);font-size:18px;margin-left:6px">›</span></div>`;
   };
   // agrupado por mês (mais recente primeiro)
   const groups={};
@@ -1654,6 +1657,7 @@ function openHistAluno(a){
     lst.forEach(x=>{body+=rowHist(x);});
   });
   openSheet(`Histórico — ${esc(a.nome)}`,body);
+  document.getElementById("sheetBody").querySelectorAll("[data-histaula]").forEach(r=>r.onclick=()=>openAula(r.dataset.histaula));
 }
 function enviarRecibo(a,ym){
   ym=ym||ymNow();const[yy,mm]=ym.split("-").map(Number);
@@ -1784,6 +1788,7 @@ function openVacacao(id){
      <b style="color:var(--ink)">${esc(nome)}</b> · ${dateStr}${v.local?`<br>📍 ${esc(v.local)}`:""}${Number(v.valor)>0?`<br>Valor: <b style="color:var(--ink)">${money(v.valor)}</b>`:""}</div>`;
   if(v.status!=="realizada")body+=`<div class="act green" data-vac="realizada"><div class="ai">✓</div><div><div>Marcar como realizada</div></div></div>`;
   if(v.status!=="faltou")body+=`<div class="act red" data-vac="faltou"><div class="ai">✕</div><div><div>Não rolou / faltou</div></div></div>`;
+  if(v.status!=="cancelada")body+=`<div class="act grey" data-vac="cancelada"><div class="ai">🚫</div><div><div>Cancelar vacação</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
   if(cobravel(v)){
     body+=v.pago
       ? `<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div><div class="sub">${money(v.valor)}</div></div></div>`
@@ -1818,6 +1823,7 @@ function vacacaoAction(id,act){
   const snap=snapState();
   if(act==="realizada"){v.status="realizada";mark();closeSheet();render();offerUndo(snap,"Velocity concluída ✓","green");return;}
   if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
+  if(act==="cancelada"){v.status="cancelada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Vacação cancelada","");return;}
   if(act==="agendada"){v.status="agendada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
   if(act==="pago"){v.pago=true;v.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,money(v.valor)+" recebido ✓","green");return;}
   if(act==="naopago"){v.pago=false;v.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não recebido","");return;}
