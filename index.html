@@ -1682,7 +1682,7 @@ function openAluno(id){
   document.getElementById("sheetBody").querySelectorAll("[data-pa]").forEach(b=>b.onclick=()=>{
     const act=b.dataset.pa;
     if(act==="editar"){closeSheet();formAluno(a);}
-    else if(act==="excluir"){if(confirm(`Excluir ${a.nome} e suas aulas?`)){state.alunos=state.alunos.filter(x=>x.id!==id);state.aulas=state.aulas.filter(x=>x.alunoId!==id);state.series=(state.series||[]).filter(s=>s.alunoId!==id);mark();closeSheet();render();toast("Aluno excluído");}}
+    else if(act==="excluir"){if(confirm(`Excluir ${a.nome}, suas aulas e pagamentos?`)){state.alunos=state.alunos.filter(x=>x.id!==id);state.aulas=state.aulas.filter(x=>x.alunoId!==id);state.series=(state.series||[]).filter(s=>s.alunoId!==id);state.pagamentos=state.pagamentos.filter(p=>p.alunoId!==id);mark();closeSheet();render();toast("Aluno excluído");}}
     else if(act==="pagar"){registrarPagamento(a);closeSheet();render();}
     else if(act==="cobrar"){cobrar(a,a.tipo,ym);}
     else if(act==="desfazer"){state.pagamentos=state.pagamentos.filter(p=>!(p.alunoId===a.id&&p.mesRef===ym));mark();closeSheet();render();toast("Pagamento desfeito");}
