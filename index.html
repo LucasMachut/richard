@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.9";
+const APP_VERSION="3.0";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -679,9 +679,13 @@ function render(){
 }
 function renderBanner(){
   const el=document.getElementById("globalBanner");if(!el)return;
+  let html="";
+  const nPend=pendConfirm(false).length;
+  if(nPend)html+=`<div class="gbanner" style="background:var(--brand-soft);color:var(--brand);border-color:rgba(22,209,255,.32)">⏰ ${nPend} ${nPend>1?"sessões":"sessão"} por confirmar. <button id="gbConf" style="color:var(--brand)">Confirmar</button></div>`;
   const n=state.changes||0;
-  if(n<25){el.innerHTML="";return;}
-  el.innerHTML=`<div class="gbanner">⚠️ ${n} mudanças desde o último backup. <button id="gbBak">Fazer backup</button></div>`;
+  if(n>=25)html+=`<div class="gbanner">⚠️ ${n} mudanças desde o último backup. <button id="gbBak">Fazer backup</button></div>`;
+  el.innerHTML=html;
+  const c=document.getElementById("gbConf");if(c)c.onclick=()=>abrirConfirmar(false);
   const b=document.getElementById("gbBak");if(b)b.onclick=exportJson;
 }
 function coachNome(){return (state.config&&state.config.coachNome)||"Richard";}
@@ -726,6 +730,7 @@ function renderHeader(){
 
 /* ---------- AGENDA ---------- */
 function wireAgendaClicks(el){
+  el.querySelectorAll("[data-quickdone]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();quickDone(b.dataset.quickdone,b.dataset.qk);});
   el.querySelectorAll("[data-aula]").forEach(c=>c.onclick=()=>openAula(c.dataset.aula));
   el.querySelectorAll("[data-vacacao]").forEach(c=>c.onclick=()=>openVacacao(c.dataset.vacacao));
   el.querySelectorAll("[data-evento]").forEach(c=>c.onclick=()=>openEvento(c.dataset.evento));
@@ -783,12 +788,14 @@ function renderHoje(el){
         }
       }
       if(!agora&&i===nextIdx&&now<s.start){html+=ldAgora(now);agora=true;}
-      html+=ldRow(s,i===nextIdx);
+      html+=ldRow(s,i===nextIdx,true);
     });
-    html+=`</div><button class="btn btn-ghost" id="toLinha" style="margin-top:10px">⊞ Grade horária</button>`;
+    const nDia=pendConfirm(true).length;
+    html+=`</div>${nDia?`<button class="btn" id="toConfirm" style="margin-top:10px;background:var(--brand-soft);color:var(--brand);border:1px solid rgba(22,209,255,.3)">✓ Confirmar o dia · ${nDia}</button>`:""}<button class="btn btn-ghost" id="toLinha" style="margin-top:10px">⊞ Grade horária</button>`;
   }
   el.innerHTML=html;
   wireAgendaClicks(el);
+  const tc=document.getElementById("toConfirm");if(tc)tc.onclick=()=>abrirConfirmar(true);
   const tl=document.getElementById("toLinha");if(tl)tl.onclick=()=>{ui.hojeView="linha";ui.agendaDay=today;render();};
   const ts=document.getElementById("toSemana");if(ts)ts.onclick=()=>{ui.agendaFilter="semana";render();};
 }
@@ -804,7 +811,7 @@ function ldRowsForDay(ymd){
 function ldAgora(now){
   return `<div class="ld-row ld-now-row"><div class="ld-time"><div class="ld-h" style="color:var(--brand)">${fmtMin(now)}</div></div><div class="ld-rail"><span class="ld-dot now"></span></div><div class="ld-now-line"><span>AGORA</span></div></div>`;
 }
-function ldRow(s,isNext){
+function ldRow(s,isNext,quick){
   const done=s.status==="realizada"||s.status==="faltou"||s.status==="cancelada";
   const da=s.k==="aula"?`data-aula="${s.id}"`:s.k==="vacacao"?`data-vacacao="${s.id}"`:`data-evento="${s.id}"`;
   let right="";
@@ -815,10 +822,14 @@ function ldRow(s,isNext){
   else if(s.tipo==="velocity")right="";
   else if(s.tipo==="mensal")right=`<span class="tag-pago" style="background:var(--brand-soft);color:var(--brand)">Mensal</span>`;
   else right=s.pago?`<span class="tag-pago">${money(s.valor)}</span>`:`<span class="tag-arec" style="background:var(--amber-soft);color:var(--amber)">${money(s.valor)}</span>`;
+  // ✓ rapide (1 tap = concluída, + pagamento si avulso) — n'ouvre pas la feuille
+  const qbtn=(quick&&!done&&s.tipo!=="evento")
+    ? `<button class="ld-quick" data-quickdone="${s.id}" data-qk="${s.k}" title="Concluir" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--green-soft);color:var(--green);font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1px solid rgba(47,230,166,.32);margin-left:8px">✓</button>`
+    : "";
   return `<div class="ld-row ${done?'done':''}">
     <div class="ld-time"><div class="ld-h">${s.hora}</div><div class="ld-d">${durLabel(s.dur)}</div></div>
     <div class="ld-rail"><span class="ld-dot ${isNext?'next':''}" ${isNext?'':`style="background:${s.cor}"`}></span></div>
-    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}</div>
+    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}${qbtn}</div>
   </div>`;
 }
 function renderAgenda(){
@@ -1363,6 +1374,93 @@ function openSheet(title,bodyHtml,footHtml){
 }
 function closeSheet(){document.getElementById("sheetBg").classList.remove("show");document.getElementById("sheet").classList.remove("show");}
 
+/* ===================== Fluidité (TDAH) : annulation, vibration, gestes rapides ===================== */
+function vibrate(ms){try{if(navigator.vibrate)navigator.vibrate(ms||15);}catch(e){}}
+function snapState(){return JSON.stringify(state);}
+let _undoSnap=null,_undoT=null;
+/* toast avec bouton « Desfazer » (annule le dernier geste, 6 s) */
+function offerUndo(snap,msg,type){
+  _undoSnap=snap;
+  const t=document.getElementById("toast");
+  t.innerHTML=`<span>${esc(msg)}</span><button id="undoBtn" style="margin-left:16px;font-weight:800;color:#fff;text-decoration:underline;pointer-events:auto">Desfazer</button>`;
+  t.className="toast show"+(type?" "+type:"");t.style.pointerEvents="auto";
+  clearTimeout(toastT);clearTimeout(_undoT);
+  const btn=document.getElementById("undoBtn");
+  if(btn)btn.onclick=()=>{clearTimeout(_undoT);if(_undoSnap){state=JSON.parse(_undoSnap);_undoSnap=null;save();render();}const t2=document.getElementById("toast");t2.style.pointerEvents="";t2.textContent="Desfeito ↩";t2.className="toast show";clearTimeout(toastT);toastT=setTimeout(()=>t2.className="toast",1500);vibrate(10);};
+  _undoT=setTimeout(()=>{t.className="toast";t.style.pointerEvents="";_undoSnap=null;},6000);
+}
+/* saisie d'un montant dans une feuille propre (remplace prompt()) */
+function pedirValor(titulo,valIni,cb){
+  openSheet(esc(titulo),`<div class="fld"><label>Valor (R$)</label>
+    <input id="vvInput" type="number" inputmode="decimal" step="0.01" value="${valIni?Number(valIni):""}" placeholder="0,00" style="font-size:22px;font-weight:800"></div>`,
+    `<button class="btn btn-primary" id="vvOk">Confirmar</button>`);
+  const inp=document.getElementById("vvInput");
+  setTimeout(()=>{try{inp.focus();inp.select();}catch(e){}},150);
+  document.getElementById("vvOk").onclick=()=>{const v=Number(inp.value)||0;closeSheet();cb(v);};
+}
+/* geste rapide : 1 tap = aula concluída (+ pagamento si avulso à tarif connu) */
+function quickDone(id,kind){
+  const snap=snapState();
+  if(kind==="aula"){
+    const a=state.aulas.find(x=>x.id===id);if(!a)return;const al=aluno(a.alunoId);
+    a.status="realizada";a.faltaCobrada=false;let msg="Aula concluída ✓";
+    if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0){a.valor=val;a.pago=true;a.dataPago=todayYmd();msg=money(val)+" recebido ✓";}}
+    mark();render();vibrate();offerUndo(snap,msg,"green");
+  }else{
+    const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
+    v.status="realizada";mark();render();vibrate();offerUndo(snap,"Velocity concluída ✓","green");
+  }
+}
+function quickFaltou(id,kind){
+  const snap=snapState();
+  if(kind==="aula"){const a=state.aulas.find(x=>x.id===id);if(!a)return;a.status="faltou";a.faltaCobrada=false;}
+  else{const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;v.status="faltou";v.pago=false;v.faltaCobrada=false;}
+  mark();render();vibrate();offerUndo(snap,"Marcado: faltou","");
+}
+/* séances passées encore « agendada » à confirmer (mémoire externalisée) */
+function pendConfirm(incluiHojeTodo){
+  const today=todayYmd();const now=nowMinutes();
+  const ended=(data,hora,dur)=> data<today || (data===today && (minOf(hora)||0)+(Number(dur)||60)<=now);
+  const take=(data,hora,dur)=> incluiHojeTodo ? (data<=today) : ended(data,hora,dur);
+  const isPend=st=>st!=="realizada"&&st!=="faltou"&&st!=="cancelada";
+  const arr=[];
+  state.aulas.forEach(a=>{if(isPend(a.status)&&take(a.data,a.hora,a.dur))arr.push({k:"aula",id:a.id,data:a.data,hora:a.hora||""});});
+  (state.vacacoes||[]).forEach(v=>{if(isPend(v.status)&&take(v.data,v.hora,v.dur))arr.push({k:"vacacao",id:v.id,data:v.data,hora:v.hora||""});});
+  return arr.sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
+}
+/* feuille « por confirmar » : ✓ (fez) / ✕ (faltou) par séance + bouton tout-réalisé */
+function abrirConfirmar(incluiHoje){
+  const pend=pendConfirm(incluiHoje);
+  if(!pend.length){closeSheet();toast("Tudo confirmado ✓","green");return;}
+  const btnOk=`flex:0 0 auto;width:40px;height:40px;border-radius:12px;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;background:var(--green-soft);color:var(--green);border:1px solid rgba(47,230,166,.3)`;
+  const btnNo=`flex:0 0 auto;width:40px;height:40px;border-radius:12px;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;background:var(--red-soft);color:var(--red);border:1px solid rgba(255,107,102,.3);margin-left:8px`;
+  let body=`<div class="hint" style="margin:-2px 0 12px">Toque <b style="color:var(--green)">✓</b> se a sessão aconteceu, <b style="color:var(--red)">✕</b> se faltou.</div>`;
+  pend.forEach(p=>{
+    let nome,cor;
+    if(p.k==="aula"){const a=state.aulas.find(x=>x.id===p.id);const al=aluno(a.alunoId);nome=al?al.nome:"?";cor=al?al.cor:"#888";}
+    else{const v=(state.vacacoes||[]).find(x=>x.id===p.id);nome=velNomeFull(v.unidadeId);cor=vacCor(v);}
+    const d=parseYmd(p.data);const quando=`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()].slice(0,3)} · ${p.hora}`;
+    body+=`<div class="aluno" style="gap:10px;padding:11px 13px">
+      <div class="avatar" style="width:36px;height:36px;font-size:15px;background:${cor}">${esc((nome.trim()[0]||"?").toUpperCase())}</div>
+      <div class="body"><div class="nm" style="font-size:15px">${esc(nome)}</div><div class="meta">${quando}</div></div>
+      <button data-cfdone="${p.id}" data-cfk="${p.k}" style="${btnOk}">✓</button>
+      <button data-cffalt="${p.id}" data-cfk="${p.k}" style="${btnNo}">✕</button>
+    </div>`;
+  });
+  openSheet(`Por confirmar · ${pend.length}`,body,`<button class="btn btn-primary" id="cfAllOk">✓ Todas realizadas (${pend.length})</button>`);
+  const sb=document.getElementById("sheetBody");
+  sb.querySelectorAll("[data-cfdone]").forEach(b=>b.onclick=()=>{quickDone(b.dataset.cfdone,b.dataset.cfk);abrirConfirmar(incluiHoje);});
+  sb.querySelectorAll("[data-cffalt]").forEach(b=>b.onclick=()=>{quickFaltou(b.dataset.cffalt,b.dataset.cfk);abrirConfirmar(incluiHoje);});
+  document.getElementById("cfAllOk").onclick=()=>{
+    const snap=snapState();
+    pend.forEach(p=>{
+      if(p.k==="aula"){const a=state.aulas.find(x=>x.id===p.id);if(!a)return;const al=aluno(a.alunoId);a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){let val=Number(a.valor)||Number(al.valorAula)||0;if(val>0){a.valor=val;a.pago=true;a.dataPago=todayYmd();}}}
+      else{const v=(state.vacacoes||[]).find(x=>x.id===p.id);if(v)v.status="realizada";}
+    });
+    mark();closeSheet();render();vibrate(25);offerUndo(snap,pend.length+" sessões concluídas ✓","green");
+  };
+}
+
 /* ----- detalhe da AULA: ações rápidas ----- */
 function openAula(id){
   const a=state.aulas.find(x=>x.id===id);if(!a)return;
@@ -1394,36 +1492,48 @@ function openAula(id){
       ? `<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div><div class="sub">${money(a.valor)}</div></div></div>`
       : `<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(a.valor)}</div></div></div>`;
   }
-  body+=`<div class="act blue" data-act="editar"><div class="ai">✎</div><div><div>Editar aula</div></div></div>`;
+  let mais=`<div class="act blue" data-act="editar"><div class="ai">✎</div><div><div>Editar aula</div></div></div>`;
   if(a.status!=="agendada")
-    body+=`<div class="act grey" data-act="agendada"><div class="ai">↺</div><div><div>Voltar para agendada</div></div></div>`;
+    mais+=`<div class="act grey" data-act="agendada"><div class="ai">↺</div><div><div>Voltar para agendada</div></div></div>`;
   if(a.serieId)
-    body+=`<div class="act grey" data-act="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar este horário fixo</div></div></div>`;
-  body+=`<div class="act red" data-act="excluir"><div class="ai">🗑</div><div><div>Excluir aula</div></div></div>`;
+    mais+=`<div class="act grey" data-act="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar este horário fixo</div></div></div>`;
+  mais+=`<div class="act red" data-act="excluir"><div class="ai">🗑</div><div><div>Excluir aula</div></div></div>`;
+  body+=`<div class="act grey" data-act="__mais"><div class="ai">⋯</div><div><div>Mais ações</div></div></div><div id="aulaMais" style="display:none">${mais}</div>`;
 
   openSheet("Aula",body);
-  document.getElementById("sheetBody").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>aulaAction(a.id,b.dataset.act));
+  document.getElementById("sheetBody").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.act==="__mais"){document.getElementById("aulaMais").style.display="block";b.style.display="none";return;}
+    aulaAction(a.id,b.dataset.act);
+  });
 }
 function aulaAction(id,act){
   const a=state.aulas.find(x=>x.id===id);if(!a)return;
   const al=aluno(a.alunoId);
   if(act==="editar"){closeSheet();formAula(a);return;}
-  if(act==="excluir"){if(!confirm("Excluir esta aula?"))return;state.aulas=state.aulas.filter(x=>x.id!==id);mark();closeSheet();render();toast("Aula excluída");return;}
+  if(act==="excluir"){if(!confirm("Excluir esta aula?"))return;const snap=snapState();state.aulas=state.aulas.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Aula excluída","");return;}
   if(act==="serie"){
     const serie=(state.series||[]).find(s=>s.id===a.serieId);
     if(!serie){toast("Recorrência não encontrada","amber");return;}
     if(!confirm("Encerrar esta recorrência? As próximas aulas ainda agendadas serão removidas (as já realizadas ficam)."))return;
-    serie.ativo=false;
+    const snap=snapState();serie.ativo=false;
     const hj=todayYmd();
     state.aulas=state.aulas.filter(x=>!(x.serieId===serie.id&&x.status==="agendada"&&x.data>hj));
-    mark();closeSheet();render();toast("Recorrência encerrada");return;
+    mark();closeSheet();render();offerUndo(snap,"Recorrência encerrada","");return;
   }
-  if(act==="realizada"){a.status="realizada";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=Number(al.valorAula)||0;if(!a.valor){const v=prompt("Valor desta aula avulsa (R$):","");if(v!==null)a.valor=Number(v)||0;}}}
-  if(act==="faltou"){a.status="faltou";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=al.valorAula;a.faltaCobrada=confirm("Cobrar esta falta mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}}
-  if(act==="agendada"){a.status="agendada";a.pago=false;}
-  if(act==="pago"){if(al&&al.tipo==="avulso"&&!a.valor){const v=prompt("Valor recebido (R$):","");if(v!==null)a.valor=Number(v)||0;}a.pago=true;a.dataPago=todayYmd();toast("Pagamento registrado ✓","green");}
-  if(act==="naopago"){a.pago=false;a.dataPago=null;}
-  mark();closeSheet();render();
+  const snap=snapState();
+  if(act==="realizada"){
+    a.status="realizada";a.faltaCobrada=false;
+    if(al&&al.tipo==="avulso"&&!a.valor)a.valor=Number(al.valorAula)||0;
+    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor da aula",0,v=>{a.valor=v;mark();render();offerUndo(snap,"Aula concluída ✓","green");});return;}
+    mark();closeSheet();render();offerUndo(snap,"Aula concluída ✓","green");return;
+  }
+  if(act==="faltou"){a.status="faltou";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=Number(al.valorAula)||0;a.faltaCobrada=confirm("Cobrar esta falta mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
+  if(act==="agendada"){a.status="agendada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
+  if(act==="pago"){
+    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;a.pago=true;a.dataPago=todayYmd();mark();render();offerUndo(snap,money(a.valor)+" recebido ✓","green");});return;}
+    a.pago=true;a.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,money(a.valor)+" recebido ✓","green");return;
+  }
+  if(act==="naopago"){a.pago=false;a.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não pago","");return;}
 }
 
 /* ----- detalhe do ALUNO ----- */
@@ -1562,8 +1672,9 @@ function cobrar(a,tipo,ym){
 }
 function registrarPagamento(a,ym){
   ym=ym||ymNow();
+  const snap=snapState();
   state.pagamentos.push({id:uid(),alunoId:a.id,mesRef:ym,valor:a.mensalidade,data:todayYmd()});
-  mark();toast("Mensalidade recebida ✓","green");
+  mark();vibrate();offerUndo(snap,money(a.mensalidade)+" recebido ✓","green");
 }
 function confirmPagarMensal(a,ym){
   ym=ym||ymNow();
@@ -1662,34 +1773,38 @@ function openVacacao(id){
       ? `<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div><div class="sub">${money(v.valor)}</div></div></div>`
       : `<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}</div></div></div>`;
   }
-  body+=`<div class="act" data-vac="trocar" style="background:rgba(100,116,139,.16);border-color:transparent"><div class="ai" style="background:rgba(100,116,139,.28);color:#94a3b8">🔄</div><div><div>${v.trocada?"Desfazer troca":"Trocar com colega"}</div><div class="sub">${v.trocada?"Volta para Velocity normal":"Marca o dia como trocado (outra cor)"}</div></div></div>`;
-  body+=`<div class="act blue" data-vac="editar"><div class="ai">✎</div><div><div>Editar vacação</div></div></div>`;
-  if(v.serieId)body+=`<div class="act grey" data-vac="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar esta Velocity fixa</div></div></div>`;
-  if(v.status!=="agendada")body+=`<div class="act grey" data-vac="agendada"><div class="ai">↺</div><div><div>Voltar para agendada</div></div></div>`;
-  body+=`<div class="act red" data-vac="excluir"><div class="ai">🗑</div><div><div>Excluir vacação</div></div></div>`;
+  let mais=`<div class="act" data-vac="trocar" style="background:rgba(100,116,139,.16);border-color:transparent"><div class="ai" style="background:rgba(100,116,139,.28);color:#94a3b8">🔄</div><div><div>${v.trocada?"Desfazer troca":"Trocar com colega"}</div><div class="sub">${v.trocada?"Volta para Velocity normal":"Marca o dia como trocado (outra cor)"}</div></div></div>`;
+  mais+=`<div class="act blue" data-vac="editar"><div class="ai">✎</div><div><div>Editar vacação</div></div></div>`;
+  if(v.serieId)mais+=`<div class="act grey" data-vac="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar esta Velocity fixa</div></div></div>`;
+  if(v.status!=="agendada")mais+=`<div class="act grey" data-vac="agendada"><div class="ai">↺</div><div><div>Voltar para agendada</div></div></div>`;
+  mais+=`<div class="act red" data-vac="excluir"><div class="ai">🗑</div><div><div>Excluir vacação</div></div></div>`;
+  body+=`<div class="act grey" data-vac="__mais"><div class="ai">⋯</div><div><div>Mais ações</div></div></div><div id="vacMais" style="display:none">${mais}</div>`;
   openSheet(nome,body);
-  document.getElementById("sheetBody").querySelectorAll("[data-vac]").forEach(b=>b.onclick=()=>vacacaoAction(v.id,b.dataset.vac));
+  document.getElementById("sheetBody").querySelectorAll("[data-vac]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.vac==="__mais"){document.getElementById("vacMais").style.display="block";b.style.display="none";return;}
+    vacacaoAction(v.id,b.dataset.vac);
+  });
 }
 function vacacaoAction(id,act){
   const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
   if(act==="editar"){closeSheet();formVacacao(v);return;}
-  if(act==="trocar"){v.trocada=!v.trocada;mark();closeSheet();render();toast(v.trocada?"Dia marcado como troca 🔄":"Troca desfeita");return;}
+  if(act==="trocar"){const snap=snapState();v.trocada=!v.trocada;mark();closeSheet();render();offerUndo(snap,v.trocada?"Dia marcado como troca 🔄":"Troca desfeita","");return;}
   if(act==="serie"){
     const serie=(state.velSeries||[]).find(s=>s.id===v.serieId);
     if(!serie){toast("Recorrência não encontrada","amber");return;}
     if(!confirm("Encerrar esta recorrência? As próximas vacações ainda agendadas serão removidas (as já realizadas ficam)."))return;
-    serie.ativo=false;
+    const snap=snapState();serie.ativo=false;
     const hj=todayYmd();
     state.vacacoes=state.vacacoes.filter(x=>!(x.serieId===serie.id&&x.status==="agendada"&&x.data>hj));
-    mark();closeSheet();render();toast("Recorrência encerrada");return;
+    mark();closeSheet();render();offerUndo(snap,"Recorrência encerrada","");return;
   }
-  if(act==="excluir"){if(!confirm("Excluir esta vacação?"))return;state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();toast("Vacação excluída");return;}
-  if(act==="realizada")v.status="realizada";
-  if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}
-  if(act==="agendada"){v.status="agendada";v.pago=false;}
-  if(act==="pago"){v.pago=true;v.dataPago=todayYmd();toast("Recebimento registrado ✓","green");}
-  if(act==="naopago"){v.pago=false;v.dataPago=null;}
-  mark();closeSheet();render();
+  if(act==="excluir"){if(!confirm("Excluir esta vacação?"))return;const snap=snapState();state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Vacação excluída","");return;}
+  const snap=snapState();
+  if(act==="realizada"){v.status="realizada";mark();closeSheet();render();offerUndo(snap,"Velocity concluída ✓","green");return;}
+  if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
+  if(act==="agendada"){v.status="agendada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
+  if(act==="pago"){v.pago=true;v.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,money(v.valor)+" recebido ✓","green");return;}
+  if(act==="naopago"){v.pago=false;v.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não recebido","");return;}
 }
 /* Velocity payé en fin de mois (type salaire) : encaisse d'un coup toutes les séances
    réalisées non payées d'une unité sur le mois affiché, dataPago = dernier jour du mois */
@@ -1700,8 +1815,9 @@ function receberMesVelocity(unidadeId,ym){
   const[Y,M]=ym.split("-").map(Number);
   if(!confirm(`Receber tudo de ${velNomeFull(unidadeId)} — ${MESES[M-1]} ${Y} ?\n\n${alvo.length} aula(s) · ${money(tot)}`))return;
   const fimMes=ymdOf(new Date(Y,M,0)); // dernier jour du mois
+  const snap=snapState();
   alvo.forEach(v=>{v.pago=true;v.dataPago=fimMes;});
-  mark();render();toast(`${money(tot)} recebido ✓`,"green");
+  mark();render();vibrate(20);offerUndo(snap,`${money(tot)} recebido ✓`,"green");
 }
 function formVacacao(existing,pref){
   if(!state.vacacoes)state.vacacoes=[];
@@ -2052,7 +2168,7 @@ function download(blob,name){const a=document.createElement("a");a.href=URL.crea
    UI plumbing
    ===================================================================== */
 let toastT;
-function toast(msg,type){const t=document.getElementById("toast");t.textContent=msg;t.className="toast show"+(type?" "+type:"");clearTimeout(toastT);toastT=setTimeout(()=>t.className="toast",2000);}
+function toast(msg,type){const t=document.getElementById("toast");t.style.pointerEvents="";clearTimeout(_undoT);_undoSnap=null;t.textContent=msg;t.className="toast show"+(type?" "+type:"");clearTimeout(toastT);toastT=setTimeout(()=>t.className="toast",2000);}
 function setTab(tab){ui.tab=tab;document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById("page-"+tab).classList.add("active");document.getElementById("scroll").scrollTop=0;}
 
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{setTab(b.dataset.tab);render();});
