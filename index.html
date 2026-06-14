@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.1";
+const APP_VERSION="3.2";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1631,14 +1631,27 @@ function openHistAluno(a){
   </div>
   <div class="hint" style="margin:0 0 12px">${realizadas} realizada(s) · ${faltas} falta(s) · ${aulas.length} no total</div>`;
   if(!aulas.length)body+=`<div class="hoje-empty">Nenhuma aula registrada.</div>`;
-  aulas.forEach(x=>{
+  const rowHist=(x)=>{
     const d=parseYmd(x.data);
     const stLabel={agendada:"Agendada",realizada:"Realizada",faltou:"Faltou",cancelada:"Cancelada"}[x.status]||x.status;
     const cobr=x.status==="faltou"&&x.faltaCobrada?' <span class="tag-arec">cobrada</span>':'';
     const val=a.tipo==="avulso"?`<span class="ev-sub">${money(x.valor)}${x.pago?" ✓":""}</span>`:"";
-    body+=`<div class="depois-row"><div class="dtime" style="width:62px">${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}</div>
+    return `<div class="depois-row"><div class="dtime" style="width:62px">${DIAS_LG[d.getDay()].slice(0,3)} ${d.getDate()}</div>
       <div class="dbody"><div class="dnm" style="font-size:14px;font-weight:700">${x.hora} · <span class="st ${x.status}">${stLabel}</span>${cobr}</div><div class="dmeta">${x.local?esc(x.local):"—"}</div></div>
       ${val}</div>`;
+  };
+  // agrupado por mês (mais recente primeiro)
+  const groups={};
+  aulas.forEach(x=>{const ym=(x.data||"").slice(0,7);(groups[ym]=groups[ym]||[]).push(x);});
+  Object.keys(groups).sort((p,q)=>q.localeCompare(p)).forEach(ym=>{
+    const[yy,mm]=ym.split("-").map(Number);const lst=groups[ym];
+    const rz=lst.filter(x=>x.status==="realizada").length;
+    const ft=lst.filter(x=>x.status==="faltou").length;
+    let pagoMes=0;if(a.tipo==="avulso")lst.forEach(x=>{if(cobravel(x)&&x.pago)pagoMes+=Number(x.valor)||0;});
+    const sub=`${rz} realizada(s)${ft?` · ${ft} falta(s)`:""}${a.tipo==="avulso"&&pagoMes?` · ${money(pagoMes)} pago`:""}`;
+    body+=`<div class="section-title" style="margin:18px 4px 4px">${MESES[mm-1]} ${yy} <span class="count">${lst.length}</span></div>
+      <div class="opt" style="margin:0 4px 8px;font-size:12px;text-transform:none;letter-spacing:0">${sub}</div>`;
+    lst.forEach(x=>{body+=rowHist(x);});
   });
   openSheet(`Histórico — ${esc(a.nome)}`,body);
 }
