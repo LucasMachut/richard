@@ -453,7 +453,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="2.7";
+const APP_VERSION="2.8";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -645,7 +645,7 @@ function fmtDH(data,hora){const d=parseYmd(data);return `${d.getDate()} ${MESES[
 function cobravel(x){return x.status==="realizada"||(x.status==="faltou"&&x.faltaCobrada);}
 function anualStats(a,ano){
   const y=String(ano);let recebido=0;
-  state.pagamentos.forEach(p=>{if(p.alunoId===a.id&&(p.data||"").startsWith(y))recebido+=Number(p.valor)||0;});
+  state.pagamentos.forEach(p=>{if(p.alunoId===a.id&&(p.mesRef||(p.data||"").slice(0,7)).startsWith(y))recebido+=Number(p.valor)||0;});
   state.aulas.forEach(x=>{if(x.alunoId===a.id&&cobravel(x)&&x.pago&&(x.dataPago||x.data||"").startsWith(y))recebido+=Number(x.valor)||0;});
   const realizadas=state.aulas.filter(x=>x.alunoId===a.id&&x.status==="realizada"&&(x.data||"").startsWith(y)).length;
   return{recebido,realizadas};
@@ -1063,7 +1063,7 @@ function aulasMesAvulso(alunoId,ym){
 function receitaAno(year){
   const arr=Array.from({length:12},()=>({perso:0,vel:0}));
   const ys=String(year);
-  state.pagamentos.forEach(p=>{if((p.data||"").startsWith(ys)){const mi=Number(p.data.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(p.valor)||0;}});
+  state.pagamentos.forEach(p=>{const ref=p.mesRef||(p.data||"").slice(0,7);if(ref.startsWith(ys)){const mi=Number(ref.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(p.valor)||0;}});
   state.aulas.forEach(a=>{const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(cobravel(a)&&a.pago){const dt=a.dataPago||a.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(a.valor)||0;}}});
   (state.vacacoes||[]).forEach(v=>{if(cobravel(v)&&v.pago){const dt=v.dataPago||v.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].vel+=Number(v.valor)||0;}}});
   return arr;
@@ -1111,7 +1111,9 @@ function renderFinanceiro(){
 
   // recebido no mês = pagamentos mensais (data no mês) + aulas avulsas pagas no mês
   let recebido=0, aReceber=0;
-  state.pagamentos.forEach(p=>{ if((p.data||"").startsWith(ym)) recebido+=Number(p.valor)||0; });
+  // mensalité comptée dans son MOIS DE RÉFÉRENCE (mesRef), pas sa date d'encaissement —
+  // cohérent avec le statut « Pago » (pagoMes) et avec le prévisionnel (previsaoMes)
+  state.pagamentos.forEach(p=>{ if((p.mesRef||(p.data||"").slice(0,7))===ym) recebido+=Number(p.valor)||0; });
   state.aulas.forEach(a=>{
     const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;
     if(cobravel(a)&&a.pago&&(a.dataPago||a.data||"").startsWith(ym)) recebido+=Number(a.valor)||0;
