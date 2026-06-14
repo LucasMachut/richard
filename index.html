@@ -468,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.1";
+const APP_VERSION="4.2";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1419,6 +1419,16 @@ function pedirValor(titulo,valIni,cb){
   setTimeout(()=>{try{inp.focus();inp.select();}catch(e){}},150);
   document.getElementById("vvOk").onclick=()=>{const v=Number(inp.value)||0;closeSheet();cb(v);};
 }
+/* saisie d'une date de paiement (échéance réelle) — défaut aujourd'hui */
+function pedirData(titulo,dataIni,cb){
+  openSheet(esc(titulo),`<div class="fld"><label>Data do pagamento</label>
+    <input id="vdInput" type="date" value="${dataIni||todayYmd()}" style="font-size:18px;font-weight:700"></div>
+    <div class="hint" style="margin:-6px 0 0">Quando o dinheiro entrou (ou vai entrar). Padrão: hoje.</div>`,
+    `<button class="btn btn-primary" id="vdOk">Confirmar</button>`);
+  const inp=document.getElementById("vdInput");
+  setTimeout(()=>{try{inp.focus();}catch(e){}},150);
+  document.getElementById("vdOk").onclick=()=>{const v=inp.value||dataIni||todayYmd();closeSheet();cb(v);};
+}
 /* geste rapide : 1 tap = aula concluída (+ pagamento si avulso à tarif connu) */
 function quickDone(id,kind){
   const snap=snapState();
@@ -1545,9 +1555,12 @@ function openAula(id){
   if(al&&al.tipo==="avulso"){
     const valShow=Number(a.valor)||Number(al.valorAula)||0;
     body+=`<div class="grp-lbl">Pagamento</div>`;
-    body+=a.pago
-      ? `<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div><div class="sub">${money(a.valor)}</div></div></div>`
-      : `<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(valShow)}${!cobravel(a)?" · confirma a presença":""}</div></div></div>`;
+    if(a.pago){
+      body+=`<div class="act green" data-act="dataPag"><div class="ai">📅</div><div><div>Pago em ${a.dataPago?esc(dataSem(parseYmd(a.dataPago))):"—"}</div><div class="sub">${money(a.valor)} · toque para mudar a data</div></div></div>`;
+      body+=`<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div></div></div>`;
+    }else{
+      body+=`<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(valShow)}${!cobravel(a)?" · confirma a presença":""}</div></div></div>`;
+    }
   }else if(al&&al.tipo==="mensal"){
     body+=`<div class="grp-lbl">Pagamento</div><div class="hint" style="margin:0 0 9px">Mensalidade — registrada no <b style="color:var(--ink)">Financeiro</b>.</div>`;
   }
@@ -1591,10 +1604,11 @@ function aulaAction(id,act){
   if(act==="agendada"){a.status="agendada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
   if(act==="pago"){
     const confirmou=!cobravel(a); // pagar também confirma a presença
-    const finish=()=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
-    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;finish();});return;}
-    finish();return;
+    const finish=(dt)=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=dt;mark();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
+    if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;pedirData("Registrar pagamento",todayYmd(),dt=>finish(dt));});return;}
+    closeSheet();pedirData("Registrar pagamento",todayYmd(),dt=>finish(dt));return;
   }
+  if(act==="dataPag"){closeSheet();pedirData("Data do pagamento",a.dataPago||todayYmd(),dt=>{a.dataPago=dt;mark();render();offerUndo(snap,"Data atualizada ✓","green");});return;}
   if(act==="naopago"){a.pago=false;a.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não pago","");return;}
 }
 
@@ -1746,16 +1760,16 @@ function cobrar(a,tipo,ym){
   if(!d){toast("Sem WhatsApp cadastrado","amber");return;}
   window.open(`https://wa.me/${d}?text=${encodeURIComponent(msg)}`,"_blank");
 }
-function registrarPagamento(a,ym){
+function registrarPagamento(a,ym,dataPg){
   ym=ym||ymNow();
   const snap=snapState();
-  state.pagamentos.push({id:uid(),alunoId:a.id,mesRef:ym,valor:a.mensalidade,data:todayYmd()});
+  state.pagamentos.push({id:uid(),alunoId:a.id,mesRef:ym,valor:a.mensalidade,data:dataPg||todayYmd()});
   mark();vibrate();offerUndo(snap,money(a.mensalidade)+" recebido ✓","green");
 }
 function confirmPagarMensal(a,ym){
   ym=ym||ymNow();
   const[yy,mm]=ym.split("-").map(Number);
-  if(confirm(`Receber mensalidade de ${a.nome} (${money(a.mensalidade)}) — ${MESES[mm-1]}?`)){registrarPagamento(a,ym);render();}
+  pedirData(`Mensalidade de ${a.nome} — ${MESES[mm-1]}`,todayYmd(),dt=>{registrarPagamento(a,ym,dt);render();});
 }
 
 /* =====================================================================
@@ -1847,9 +1861,12 @@ function openVacacao(id){
   if(v.status!=="faltou")body+=`<div class="act red" data-vac="faltou"><div class="ai">✕</div><div><div>Não rolou / faltou</div></div></div>`;
   if(v.status!=="cancelada")body+=`<div class="act grey" data-vac="cancelada"><div class="ai">🚫</div><div><div>Cancelar vacação</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
   body+=`<div class="grp-lbl">Pagamento <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-faint)">· normalmente no fim do mês</span></div>`;
-  body+=v.pago
-    ? `<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div><div class="sub">${money(v.valor)}</div></div></div>`
-    : `<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}${!cobravel(v)?" · confirma a presença":""}</div></div></div>`;
+  if(v.pago){
+    body+=`<div class="act green" data-vac="dataPag"><div class="ai">📅</div><div><div>Recebido em ${v.dataPago?esc(dataSem(parseYmd(v.dataPago))):"—"}</div><div class="sub">${money(v.valor)} · toque para mudar a data</div></div></div>`;
+    body+=`<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div></div></div>`;
+  }else{
+    body+=`<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}${!cobravel(v)?" · confirma a presença":""}</div></div></div>`;
+  }
   let mais=`<div class="act" data-vac="trocar" style="background:rgba(100,116,139,.16);border-color:transparent"><div class="ai" style="background:rgba(100,116,139,.28);color:#94a3b8">🔄</div><div><div>${v.trocada?"Desfazer troca":"Trocar com colega"}</div><div class="sub">${v.trocada?"Volta para Velocity normal":"Marca o dia como trocado (outra cor)"}</div></div></div>`;
   mais+=`<div class="act blue" data-vac="editar"><div class="ai">✎</div><div><div>Editar vacação</div></div></div>`;
   if(v.serieId)mais+=`<div class="act grey" data-vac="serie"><div class="ai">🔁</div><div><div>Encerrar recorrência</div><div class="sub">Para de criar esta Velocity fixa</div></div></div>`;
@@ -1881,7 +1898,8 @@ function vacacaoAction(id,act){
   if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
   if(act==="cancelada"){v.status="cancelada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Vacação cancelada","");return;}
   if(act==="agendada"){v.status="agendada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
-  if(act==="pago"){const confirmou=!cobravel(v);if(confirmou)v.status="realizada";v.pago=true;v.dataPago=todayYmd();mark();closeSheet();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");return;}
+  if(act==="pago"){const confirmou=!cobravel(v);closeSheet();pedirData("Registrar recebimento",todayYmd(),dt=>{if(confirmou)v.status="realizada";v.pago=true;v.dataPago=dt;mark();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");});return;}
+  if(act==="dataPag"){closeSheet();pedirData("Data do recebimento",v.dataPago||todayYmd(),dt=>{v.dataPago=dt;mark();render();offerUndo(snap,"Data atualizada ✓","green");});return;}
   if(act==="naopago"){v.pago=false;v.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não recebido","");return;}
 }
 /* Velocity payé en fin de mois (type salaire) : encaisse d'un coup toutes les séances
