@@ -1092,13 +1092,29 @@ function previsaoAno(year){
 /* prévision d'un mois précis : {perso, vel:{unidadeId:montant}} */
 function previsaoMes(ym){
   const [Y,Mn]=ym.split("-").map(Number);const mi=Mn-1;
-  const monthCount=(desde,ativo)=>{if(ativo===false||!desde)return 0;let c=parseYmd(desde);const first=new Date(Y,mi,1),last=new Date(Y,mi+1,0);while(c<first)c.setDate(c.getDate()+7);let n=0;while(c<=last){n++;c.setDate(c.getDate()+7);}return n;};
+  const first=new Date(Y,mi,1),last=new Date(Y,mi+1,0);
+  // somme prévisionnelle d'une série sur le mois, en tenant compte du statut RÉEL
+  // de chaque occurrence déjà générée : annulée / absence non facturée = non comptée
+  // (occurrence pas encore générée = projetée à partir de la valeur de la série)
+  const serieMes=(se,items)=>{
+    if(se.ativo===false||!se.desde)return 0;
+    let c=parseYmd(se.desde);while(c<first)c.setDate(c.getDate()+7);
+    let tot=0;
+    while(c<=last){
+      const ymd=ymdOf(c);
+      const occ=items.find(x=>x.serieId===se.id&&x.data===ymd);
+      if(occ){ if(!(occ.status==="cancelada"||(occ.status==="faltou"&&!occ.faltaCobrada))) tot+=Number(occ.valor)||0; }
+      else tot+=Number(se.valor)||0;
+      c.setDate(c.getDate()+7);
+    }
+    return tot;
+  };
   let perso=0;const vel={};
   state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{perso+=Number(a.mensalidade)||0;});
   state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.status==="cancelada"||(a.status==="faltou"&&!a.faltaCobrada))return;if((a.data||"").startsWith(ym))perso+=Number(a.valor)||0;});
   (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(v.status==="cancelada"||(v.status==="faltou"&&!v.faltaCobrada))return;if((v.data||"").startsWith(ym))vel[v.unidadeId]=(vel[v.unidadeId]||0)+(Number(v.valor)||0);});
-  (state.series||[]).forEach(se=>{perso+=monthCount(se.desde,se.ativo)*(Number(se.valor)||0);});
-  (state.velSeries||[]).forEach(se=>{vel[se.unidadeId]=(vel[se.unidadeId]||0)+monthCount(se.desde,se.ativo)*(Number(se.valor)||0);});
+  (state.series||[]).forEach(se=>{perso+=serieMes(se,state.aulas);});
+  (state.velSeries||[]).forEach(se=>{vel[se.unidadeId]=(vel[se.unidadeId]||0)+serieMes(se,state.vacacoes||[]);});
   return {perso,vel};
 }
 function renderFinanceiro(){
@@ -1218,11 +1234,14 @@ function renderFinanceiro(){
     const list=(state.vacacoes||[]).filter(v=>v.unidadeId===u.id&&(v.data||"").startsWith(ym)).sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
     const rec=recVel[u.id]||0;const ar=arVelU[u.id]||0;
     if(rec<=0&&ar<=0&&!list.length)return; // rien ce mois pour cette unité
+    // « A receber » = dette réelle (séances faites, non payées) ; « Previsto » = séances encore à réaliser (agendadas)
+    const arReal=list.filter(x=>cobravel(x)&&!x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0);
+    const previsto=Math.max(0,ar-arReal);
     velHtml+=`<div class="section-title"><span style="color:${uc}">🟣 ${esc(uNome)}</span> ${list.length?`<span class="count">${list.length}</span>`:""}</div>
-      <div class="summary" style="margin:0 0 12px">
+      <div class="summary" style="margin:0 0 ${previsto>0?'4px':'12px'}">
         <div class="sum" style="border-color:${uc}33"><div class="lbl" style="color:${uc}">Recebido</div><div class="val" style="color:${uc}">${money(rec)}</div></div>
-        <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(ar)}</div></div>
-      </div>`;
+        <div class="sum" style="border-color:${uc}33"><div class="lbl">A receber</div><div class="val">${money(arReal)}</div></div>
+      </div>${previsto>0?`<div class="opt" style="margin:0 4px 12px;font-size:12.5px">+ ${money(previsto)} previsto · ${list.filter(x=>x.status==="agendada").length} agendada(s) ainda não realizada(s)</div>`:""}`;
     list.forEach(v=>{
       const d=parseYmd(v.data);const realizada=v.status==="realizada";let right;
       if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
