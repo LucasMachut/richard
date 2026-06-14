@@ -153,7 +153,10 @@
   .tl-ev .ic-pair{right:3px;bottom:3px;gap:3px}
   .tl-ev .ic{width:15px;height:15px;font-size:9px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
   .tl-ev .ic.wait{box-shadow:inset 0 0 0 1px var(--line-strong)}
-  .ld-card .ic-pair{position:static;flex:0 0 auto}
+  .ld-card .ic-pair{position:static;flex:0 0 auto;gap:9px;margin-left:6px}
+  .ld-card .ic{width:32px;height:32px;font-size:15px}
+  .ic[data-icpres],.ic[data-icpay]{cursor:pointer}
+  .ic[data-icpres]:active,.ic[data-icpay]:active{transform:scale(.88)}
   .aula.evento .bar{opacity:.85;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.5) 0 3px,transparent 3px 6px)}
   .st.evento-tag{background:#eef1f6;color:var(--ink-soft)}
   .ev-sub{font-size:11.5px;color:var(--ink-faint);font-weight:600;display:inline-flex;align-items:center;gap:3px}
@@ -465,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="3.9";
+const APP_VERSION="4.0";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -745,7 +748,8 @@ function renderHeader(){
 
 /* ---------- AGENDA ---------- */
 function wireAgendaClicks(el){
-  el.querySelectorAll("[data-quickdone]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();quickDone(b.dataset.quickdone,b.dataset.qk);});
+  el.querySelectorAll("[data-icpres]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();togglePresenca(b.dataset.icpres,b.dataset.ick);});
+  el.querySelectorAll("[data-icpay]").forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();togglePagamento(b.dataset.icpay,b.dataset.ick);});
   el.querySelectorAll("[data-aula]").forEach(c=>c.onclick=()=>openAula(c.dataset.aula));
   el.querySelectorAll("[data-vacacao]").forEach(c=>c.onclick=()=>openVacacao(c.dataset.vacacao));
   el.querySelectorAll("[data-evento]").forEach(c=>c.onclick=()=>openEvento(c.dataset.evento));
@@ -830,15 +834,11 @@ function ldAgora(now){
 function ldRow(s,isNext,quick){
   const done=s.status==="realizada"||s.status==="faltou"||s.status==="cancelada";
   const da=s.k==="aula"?`data-aula="${s.id}"`:s.k==="vacacao"?`data-vacacao="${s.id}"`:`data-evento="${s.id}"`;
-  const right = s.tipo==="evento" ? "" : statusIcones(s.status, s.payState||"wait");
-  // ✓ rapide (1 tap = concluída, + pagamento si avulso) — n'ouvre pas la feuille
-  const qbtn=(quick&&!done&&s.tipo!=="evento")
-    ? `<button class="ld-quick" data-quickdone="${s.id}" data-qk="${s.k}" title="Concluir" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--green-soft);color:var(--green);font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1px solid rgba(47,230,166,.32);margin-left:8px">✓</button>`
-    : "";
+  const right = s.tipo==="evento" ? "" : statusIcones(s.status, s.payState||"wait", s.id, s.k);
   return `<div class="ld-row ${done?'done':''}">
     <div class="ld-time"><div class="ld-h">${s.hora}</div><div class="ld-d">${durLabel(s.dur)}</div></div>
     <div class="ld-rail"><span class="ld-dot ${isNext?'next':''}" ${isNext?'':`style="background:${s.cor}"`}></span></div>
-    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}${qbtn}</div>
+    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}</div>
   </div>`;
 }
 function renderAgenda(){
@@ -954,7 +954,7 @@ function renderDay(el){
        style="top:${top}px;height:${hgt}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);background:${x.color}">
        <div class="t1">${esc(x.title)}</div>
        ${compact?"":`<div class="t2">${fmtMin(x.start)}–${fmtMin(x.end)}${x.local?" · "+esc(x.local):""}</div>`}
-       ${x.kind!=="evento"?statusIcones(x.status, x.kind==="aula"?payStateAula(state.aulas.find(a=>a.id===x.id)||{}):payStateVac((state.vacacoes||[]).find(v=>v.id===x.id)||{})):""}
+       ${x.kind!=="evento"?statusIcones(x.status, x.kind==="aula"?payStateAula(state.aulas.find(a=>a.id===x.id)||{}):payStateVac((state.vacacoes||[]).find(v=>v.id===x.id)||{}), x.id, x.kind):""}
      </div>`;
   });
 
@@ -994,17 +994,19 @@ function eventoCard(e){
     </div>
   </div>`;
 }
-/* 2 icônes : présence (status) + paiement (payState : ok/due/wait) */
-function statusIcones(status,payState){
+/* 2 icônes CLIQUABLES : présence (status) + paiement (payState : ok/due/wait) */
+function statusIcones(status,payState,id,kind){
+  const dp = id?` data-icpres="${id}" data-ick="${kind}"`:"";
+  const dm = id?` data-icpay="${id}" data-ick="${kind}"`:"";
   let p;
-  if(status==="realizada")p='<span class="ic ok" title="Aconteceu">✓</span>';
-  else if(status==="faltou")p='<span class="ic no" title="Faltou">✕</span>';
-  else if(status==="cancelada")p='<span class="ic cancel" title="Cancelada">⊘</span>';
-  else p='<span class="ic wait" title="A confirmar">?</span>';
+  if(status==="realizada")p=`<span class="ic ok"${dp} title="Aconteceu — toque para desfazer">✓</span>`;
+  else if(status==="faltou")p=`<span class="ic no"${dp} title="Faltou — toque para validar">✕</span>`;
+  else if(status==="cancelada")p=`<span class="ic cancel"${dp} title="Cancelada — toque para validar">⊘</span>`;
+  else p=`<span class="ic wait"${dp} title="A confirmar — toque para validar">?</span>`;
   let m;
-  if(payState==="ok")m='<span class="ic ok" title="Pago">$</span>';
-  else if(payState==="due")m='<span class="ic no" title="A receber">$</span>';
-  else m='<span class="ic wait" title="A pagar">$</span>';
+  if(payState==="ok")m=`<span class="ic ok"${dm} title="Pago — toque para desfazer">$</span>`;
+  else if(payState==="due")m=`<span class="ic no"${dm} title="A receber — toque para registrar">$</span>`;
+  else m=`<span class="ic wait"${dm} title="A pagar — toque para registrar">$</span>`;
   return `<span class="ic-pair">${p}${m}</span>`;
 }
 function payStateAula(a){const al=aluno(a.alunoId);if(al&&al.tipo==="mensal")return pagoMes(al.id,(a.data||"").slice(0,7))?"ok":"wait";if(a.pago)return "ok";if(cobravel(a))return "due";return "wait";}
@@ -1435,6 +1437,37 @@ function quickFaltou(id,kind){
   if(kind==="aula"){const a=state.aulas.find(x=>x.id===id);if(!a)return;a.status="faltou";a.faltaCobrada=false;}
   else{const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;v.status="faltou";v.pago=false;v.faltaCobrada=false;}
   mark();render();vibrate();offerUndo(snap,"Marcado: faltou","");
+}
+/* tap na ícone de PRESENÇA : valida (agendada→realizada) ou desfaz (realizada→agendada) */
+function togglePresenca(id,kind){
+  const snap=snapState();
+  const x = kind==="aula" ? state.aulas.find(a=>a.id===id) : (state.vacacoes||[]).find(v=>v.id===id);
+  if(!x)return;
+  if(x.status==="realizada"){ x.status="agendada"; x.pago=false; mark();render();vibrate();offerUndo(snap,"Presença desfeita","");}
+  else{ x.status="realizada"; if(kind==="aula")x.faltaCobrada=false; mark();render();vibrate();offerUndo(snap,"Presença confirmada ✓","green"); }
+}
+/* tap na ícone de PAGAMENTO : registra ou desfaz (registrar também confirma a presença) */
+function togglePagamento(id,kind){
+  const snap=snapState();
+  if(kind==="aula"){
+    const a=state.aulas.find(x=>x.id===id);if(!a)return;const al=aluno(a.alunoId);
+    if(al&&al.tipo==="mensal"){ // mensalista: pagamento é do MÊS
+      const ym=(a.data||"").slice(0,7);
+      if(pagoMes(al.id,ym)){ state.pagamentos=state.pagamentos.filter(p=>!(p.alunoId===al.id&&p.mesRef===ym)); mark();render();vibrate();offerUndo(snap,"Mensalidade desfeita","");}
+      else{ state.pagamentos.push({id:uid(),alunoId:al.id,mesRef:ym,valor:al.mensalidade,data:todayYmd()}); mark();render();vibrate();offerUndo(snap,money(al.mensalidade)+" recebido ✓","green"); }
+      return;
+    }
+    if(a.pago){ a.pago=false;a.dataPago=null; mark();render();vibrate();offerUndo(snap,"Pagamento desfeito",""); return; }
+    const confirmou=!cobravel(a);
+    const finish=()=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=todayYmd(); mark();render();vibrate();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
+    if(al&&al.tipo==="avulso"&&!a.valor){ pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;finish();}); return; }
+    finish();
+  }else{
+    const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
+    if(v.pago){ v.pago=false;v.dataPago=null; mark();render();vibrate();offerUndo(snap,"Pagamento desfeito",""); return; }
+    const confirmou=!cobravel(v); if(confirmou)v.status="realizada"; v.pago=true;v.dataPago=todayYmd();
+    mark();render();vibrate();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");
+  }
 }
 /* séances passées encore « agendada » à confirmer (mémoire externalisée) */
 function pendConfirm(incluiHojeTodo){
