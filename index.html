@@ -155,6 +155,9 @@
   .tl-ev .ic.wait{box-shadow:inset 0 0 0 1px var(--line-strong)}
   .ld-card .ic-pair{position:static;flex:0 0 auto;gap:9px;margin-left:6px}
   .ld-card .ic{width:32px;height:32px;font-size:15px}
+  .ld-card .ic-pair.labeled{gap:14px;align-items:flex-start}
+  .ld-card .ic-cell{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .ld-card .ic-lbl{font-size:9px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-faint);line-height:1;text-align:center;white-space:nowrap}
   .ic[data-icpres],.ic[data-icpay]{cursor:pointer}
   .ic[data-icpres]:active,.ic[data-icpay]:active{transform:scale(.88)}
   .aula.evento .bar{opacity:.85;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.5) 0 3px,transparent 3px 6px)}
@@ -392,6 +395,9 @@
   .ld-sub{font-size:12.5px;color:var(--ink-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ld-row.done .ld-card{opacity:.5}
   .ld-row.done .ld-h,.ld-row.done .ld-d{opacity:.55}
+  .ld-row.canceled .ld-card{opacity:.62}
+  .ld-row.canceled .ld-name{text-decoration:line-through;color:var(--ink-faint)}
+  .ld-canceltag{display:inline-block;text-decoration:none;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--ink-faint);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
   .ld-check{color:var(--green);font-size:20px;font-weight:800;flex-shrink:0}
   .ld-gap-row .ld-gap-txt{align-self:center;font-size:12px;color:var(--ink-faint);font-weight:600;padding:7px 0}
   .ld-now-row .ld-time{padding-top:0;display:flex;align-items:center}
@@ -468,7 +474,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.9";
+const APP_VERSION="5.0";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -836,12 +842,13 @@ function ldAgora(now){
 }
 function ldRow(s,isNext,quick){
   const done=s.status==="realizada"||s.status==="faltou"||s.status==="cancelada";
+  const canceled=s.status==="cancelada";
   const da=s.k==="aula"?`data-aula="${s.id}"`:s.k==="vacacao"?`data-vacacao="${s.id}"`:`data-evento="${s.id}"`;
-  const right = s.tipo==="evento" ? "" : statusIcones(s.status, s.payState||"wait", s.id, s.k);
-  return `<div class="ld-row ${done?'done':''}">
+  const right = s.tipo==="evento" ? "" : statusIcones(s.status, s.payState||"wait", s.id, s.k, true);
+  return `<div class="ld-row ${done?'done':''} ${canceled?'canceled':''}">
     <div class="ld-time"><div class="ld-h">${s.hora}</div><div class="ld-d">${durLabel(s.dur)}</div></div>
     <div class="ld-rail"><span class="ld-dot ${isNext?'next':''}" ${isNext?'':`style="background:${s.cor}"`}></span></div>
-    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}</div>
+    <div class="ld-card ${isNext?'next-hl':''}" ${da}><div class="ld-body"><div class="ld-name">${esc(s.nome)}${canceled?' <span class="ld-canceltag">Cancelada</span>':''}</div>${s.sub?`<div class="ld-sub">${esc(s.sub)}</div>`:""}</div>${right}</div>
   </div>`;
 }
 function renderAgenda(){
@@ -998,18 +1005,19 @@ function eventoCard(e){
   </div>`;
 }
 /* 2 icônes CLIQUABLES : présence (status) + paiement (payState : ok/due/wait) */
-function statusIcones(status,payState,id,kind){
+function statusIcones(status,payState,id,kind,withLabel){
   const dp = id?` data-icpres="${id}" data-ick="${kind}"`:"";
   const dm = id?` data-icpay="${id}" data-ick="${kind}"`:"";
-  let p;
-  if(status==="realizada")p=`<span class="ic ok"${dp} title="Aconteceu — toque para cancelar">✓</span>`;
-  else if(status==="faltou")p=`<span class="ic no"${dp} title="Faltou — toque para validar">✕</span>`;
-  else if(status==="cancelada")p=`<span class="ic cancel"${dp} title="Cancelada — toque para reabrir (agendada)">⊘</span>`;
-  else p=`<span class="ic wait"${dp} title="A confirmar — toque para validar">?</span>`;
-  let m;
-  if(payState==="ok")m=`<span class="ic ok"${dm} title="Pago — toque para desfazer">$</span>`;
-  else if(payState==="due")m=`<span class="ic no"${dm} title="A receber — toque para registrar">$</span>`;
-  else m=`<span class="ic wait"${dm} title="A pagar — toque para registrar">$</span>`;
+  let p,pl;
+  if(status==="realizada"){p=`<span class="ic ok"${dp} title="Aconteceu — toque para cancelar">✓</span>`;pl="feito";}
+  else if(status==="faltou"){p=`<span class="ic no"${dp} title="Faltou — toque para validar">✕</span>`;pl="faltou";}
+  else if(status==="cancelada"){p=`<span class="ic cancel"${dp} title="Cancelada — toque para reabrir (agendada)">⊘</span>`;pl="cancelada";}
+  else {p=`<span class="ic wait"${dp} title="A confirmar — toque para validar">?</span>`;pl="confirmar";}
+  let m,ml;
+  if(payState==="ok"){m=`<span class="ic ok"${dm} title="Pago — toque para desfazer">$</span>`;ml="pago";}
+  else if(payState==="due"){m=`<span class="ic no"${dm} title="A receber — toque para registrar">$</span>`;ml="receber";}
+  else {m=`<span class="ic wait"${dm} title="A pagar — toque para registrar">$</span>`;ml="a pagar";}
+  if(withLabel) return `<span class="ic-pair labeled"><span class="ic-cell">${p}<span class="ic-lbl">${pl}</span></span><span class="ic-cell">${m}<span class="ic-lbl">${ml}</span></span></span>`;
   return `<span class="ic-pair">${p}${m}</span>`;
 }
 function payStateAula(a){const al=aluno(a.alunoId);if(al&&al.tipo==="mensal")return pagoMes(al.id,(a.data||"").slice(0,7))?"ok":"wait";if(a.pago)return "ok";if(cobravel(a))return "due";return "wait";}
