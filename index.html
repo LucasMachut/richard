@@ -474,7 +474,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="5.1";
+const APP_VERSION="5.2";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -708,7 +708,10 @@ function renderBanner(){
   const el=document.getElementById("globalBanner");if(!el)return;
   let html="";
   const nPend=pendConfirm(false).length;
-  if(nPend)html+=`<div class="gbanner" style="background:var(--brand-soft);color:var(--brand);border-color:rgba(22,209,255,.32)">⏰ ${nPend} ${nPend>1?"sessões":"sessão"} por confirmar. <button id="gbConf" style="color:var(--brand)">Confirmar</button></div>`;
+  // evita porta dupla: a tela Hoje « foco » (renderHoje) já mostra seu próprio botão « Por confirmar ».
+  // Mantém o banner nas outras telas (grade, semana, todas, alunos, financeiro), onde é a única porta.
+  const hojeFoco=ui.tab==="agenda"&&ui.agendaFilter==="hoje"&&ui.hojeView!=="linha";
+  if(nPend&&!hojeFoco)html+=`<div class="gbanner" style="background:var(--brand-soft);color:var(--brand);border-color:rgba(22,209,255,.32)">⏰ ${nPend} ${nPend>1?"sessões":"sessão"} por confirmar. <button id="gbConf" style="color:var(--brand)">Confirmar</button></div>`;
   const n=state.changes||0;
   if(n>=25)html+=`<div class="gbanner">⚠️ ${n} mudanças desde o último backup. <button id="gbBak">Fazer backup</button></div>`;
   el.innerHTML=html;
