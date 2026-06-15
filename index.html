@@ -474,7 +474,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="5.0";
+const APP_VERSION="5.1";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -1213,12 +1213,14 @@ function renderFinanceiro(){
       const tot=aulasM.reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pagoVal=aulasM.filter(x=>x.pago).reduce((s,x)=>s+(Number(x.valor)||0),0);
       const pend=tot-pagoVal;
+      const nCancPagas=aulasM.filter(x=>x.status==="cancelada"&&x.pago).length; // anuladas mas pagas = receita real (conta), mas precisa ser explícito
       if(pend>0)aReceber+=pend;
       let right;
       if(aulasM.length===0)right=`<span class="pa neutral">—</span>`;
       else if(pend>0)right=`<span class="pa due">Previsto</span><div class="amt">${money(pend)}</div>`;
+      else if(nCancPagas&&nCancPagas===aulasM.length)right=`<span class="pa ok">Pago · cancelada</span><div class="amt">${money(pagoVal)}</div>`;
       else right=`<span class="pa ok">Em dia</span><div class="amt">${money(pagoVal)}</div>`;
-      const sub=`${aulasM.length} aula(s) no mês · ${money(a.valorAula)}/aula`;
+      const sub=`${aulasM.length} aula(s) no mês · ${money(a.valorAula)}/aula${nCancPagas?` · ${nCancPagas} cancelada(s) paga(s)`:""}`;
       return `<div class="aluno" data-fin="${a.id}" data-ftipo="avulso">
         <div class="avatar" style="background:${a.cor}">${initials(a.nome)}</div>
         <div class="body"><div class="nm">${esc(a.nome)}</div><div class="meta">${sub}</div></div>
