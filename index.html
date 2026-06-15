@@ -468,7 +468,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="4.5";
+const APP_VERSION="4.9";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -661,10 +661,13 @@ function dataSem(d){return `${DIAS_LG[d.getDay()]} ${d.getDate()} ${mesAbrev(d.g
 function fmtDH(data,hora){const d=parseYmd(data);return `${dataSem(d)} ${hora||""}`.trim();}
 /* uma aula/vacação é "cobrável" se foi realizada OU se foi falta cobrada */
 function cobravel(x){return x.status==="realizada"||(x.status==="faltou"&&x.faltaCobrada);}
+/* exclui de TODO total/previsão: aula cancelada OU falta não cobrada — MAS só se não foi paga.
+   Presença e pagamento são independentes: uma aula cancelada que foi paga conta como receita real. */
+function excluiTotal(x){return (x.status==="cancelada"||(x.status==="faltou"&&!x.faltaCobrada))&&!x.pago;}
 function anualStats(a,ano){
   const y=String(ano);let recebido=0;
   state.pagamentos.forEach(p=>{if(p.alunoId===a.id&&(p.mesRef||(p.data||"").slice(0,7)).startsWith(y))recebido+=Number(p.valor)||0;});
-  state.aulas.forEach(x=>{if(x.alunoId===a.id&&cobravel(x)&&x.pago&&(x.dataPago||x.data||"").startsWith(y))recebido+=Number(x.valor)||0;});
+  state.aulas.forEach(x=>{if(x.alunoId===a.id&&x.pago&&(x.dataPago||x.data||"").startsWith(y))recebido+=Number(x.valor)||0;});
   const realizadas=state.aulas.filter(x=>x.alunoId===a.id&&x.status==="realizada"&&(x.data||"").startsWith(y)).length;
   return{recebido,realizadas};
 }
@@ -999,9 +1002,9 @@ function statusIcones(status,payState,id,kind){
   const dp = id?` data-icpres="${id}" data-ick="${kind}"`:"";
   const dm = id?` data-icpay="${id}" data-ick="${kind}"`:"";
   let p;
-  if(status==="realizada")p=`<span class="ic ok"${dp} title="Aconteceu — toque para desfazer">✓</span>`;
+  if(status==="realizada")p=`<span class="ic ok"${dp} title="Aconteceu — toque para cancelar">✓</span>`;
   else if(status==="faltou")p=`<span class="ic no"${dp} title="Faltou — toque para validar">✕</span>`;
-  else if(status==="cancelada")p=`<span class="ic cancel"${dp} title="Cancelada — toque para validar">⊘</span>`;
+  else if(status==="cancelada")p=`<span class="ic cancel"${dp} title="Cancelada — toque para reabrir (agendada)">⊘</span>`;
   else p=`<span class="ic wait"${dp} title="A confirmar — toque para validar">?</span>`;
   let m;
   if(payState==="ok")m=`<span class="ic ok"${dm} title="Pago — toque para desfazer">$</span>`;
@@ -1089,15 +1092,15 @@ function aulasAvulsoMes(alunoId,ym){
 }
 /* avulso : tout ce qui compte dans le mois (agendada + realizada + falta cobrada) pour la prévision "a receber" — exclut annulées et absences non facturées */
 function aulasMesAvulso(alunoId,ym){
-  return state.aulas.filter(x=>x.alunoId===alunoId&&(x.data||"").startsWith(ym)&&x.status!=="cancelada"&&!(x.status==="faltou"&&!x.faltaCobrada));
+  return state.aulas.filter(x=>x.alunoId===alunoId&&(x.data||"").startsWith(ym)&&!excluiTotal(x));
 }
 /* receita recebida mês a mês no ano (perso vs Velocity) p/ o gráfico anual */
 function receitaAno(year){
   const arr=Array.from({length:12},()=>({perso:0,vel:0}));
   const ys=String(year);
   state.pagamentos.forEach(p=>{const ref=p.mesRef||(p.data||"").slice(0,7);if(ref.startsWith(ys)){const mi=Number(ref.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(p.valor)||0;}});
-  state.aulas.forEach(a=>{const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(cobravel(a)&&a.pago){const dt=a.dataPago||a.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(a.valor)||0;}}});
-  (state.vacacoes||[]).forEach(v=>{if(cobravel(v)&&v.pago){const dt=v.dataPago||v.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].vel+=Number(v.valor)||0;}}});
+  state.aulas.forEach(a=>{const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.pago){const dt=a.dataPago||a.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].perso+=Number(a.valor)||0;}}});
+  (state.vacacoes||[]).forEach(v=>{if(v.pago){const dt=v.dataPago||v.data||"";if(dt.startsWith(ys)){const mi=Number(dt.slice(5,7))-1;if(arr[mi])arr[mi].vel+=Number(v.valor)||0;}}});
   return arr;
 }
 /* prévision (forecast) mois par mois sur toute l'année : mensalités + séances + récurrences projetées */
@@ -1111,11 +1114,11 @@ function projectSerie(se,Y,arr,key){
 function previsaoAno(year){
   const arr=Array.from({length:12},()=>({perso:0,vel:0}));const Y=Number(year),ys=String(Y);
   // mensalistes actifs : mensalité chaque mois
-  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{const v=Number(a.mensalidade)||0;for(let m=0;m<12;m++)arr[m].perso+=v;});
+  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{const v=Number(a.mensalidade)||0;for(let m=0;m<12;m++){const ymM=ys+"-"+String(m+1).padStart(2,"0");if(a.desde&&a.desde>ymM)continue;arr[m].perso+=v;}});
   // séances avulsas one-off (hors série)
-  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.status==="cancelada"||(a.status==="faltou"&&!a.faltaCobrada))return;if((a.data||"").startsWith(ys)){const m=Number(a.data.slice(5,7))-1;if(arr[m])arr[m].perso+=Number(a.valor)||0;}});
+  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(excluiTotal(a))return;if((a.data||"").startsWith(ys)){const m=Number(a.data.slice(5,7))-1;if(arr[m])arr[m].perso+=Number(a.valor)||0;}});
   // vacations Velocity one-off (hors série)
-  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(v.status==="cancelada"||(v.status==="faltou"&&!v.faltaCobrada))return;if((v.data||"").startsWith(ys)){const m=Number(v.data.slice(5,7))-1;if(arr[m])arr[m].vel+=Number(v.valor)||0;}});
+  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(excluiTotal(v))return;if((v.data||"").startsWith(ys)){const m=Number(v.data.slice(5,7))-1;if(arr[m])arr[m].vel+=Number(v.valor)||0;}});
   // récurrences projetées sur toute l'année
   (state.series||[]).forEach(se=>projectSerie(se,Y,arr,"perso"));
   (state.velSeries||[]).forEach(se=>projectSerie(se,Y,arr,"vel"));
@@ -1135,16 +1138,16 @@ function previsaoMes(ym){
     while(c<=last){
       const ymd=ymdOf(c);
       const occ=items.find(x=>x.serieId===se.id&&x.data===ymd);
-      if(occ){ if(!(occ.status==="cancelada"||(occ.status==="faltou"&&!occ.faltaCobrada))) tot+=Number(occ.valor)||0; }
+      if(occ){ if(!excluiTotal(occ)) tot+=Number(occ.valor)||0; }
       else tot+=Number(se.valor)||0;
       c.setDate(c.getDate()+7);
     }
     return tot;
   };
   let perso=0;const vel={};
-  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{perso+=Number(a.mensalidade)||0;});
-  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(a.status==="cancelada"||(a.status==="faltou"&&!a.faltaCobrada))return;if((a.data||"").startsWith(ym))perso+=Number(a.valor)||0;});
-  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(v.status==="cancelada"||(v.status==="faltou"&&!v.faltaCobrada))return;if((v.data||"").startsWith(ym))vel[v.unidadeId]=(vel[v.unidadeId]||0)+(Number(v.valor)||0);});
+  state.alunos.filter(a=>a.ativo!==false&&a.tipo==="mensal").forEach(a=>{if(a.desde&&a.desde>ym)return;perso+=Number(a.mensalidade)||0;});
+  state.aulas.forEach(a=>{if(a.serieId)return;const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;if(excluiTotal(a))return;if((a.data||"").startsWith(ym))perso+=Number(a.valor)||0;});
+  (state.vacacoes||[]).forEach(v=>{if(v.serieId)return;if(excluiTotal(v))return;if((v.data||"").startsWith(ym))vel[v.unidadeId]=(vel[v.unidadeId]||0)+(Number(v.valor)||0);});
   (state.series||[]).forEach(se=>{perso+=serieMes(se,state.aulas);});
   (state.velSeries||[]).forEach(se=>{vel[se.unidadeId]=(vel[se.unidadeId]||0)+serieMes(se,state.vacacoes||[]);});
   return {perso,vel};
@@ -1164,7 +1167,7 @@ function renderFinanceiro(){
   state.pagamentos.forEach(p=>{ if((p.mesRef||(p.data||"").slice(0,7))===ym) recebido+=Number(p.valor)||0; });
   state.aulas.forEach(a=>{
     const al=aluno(a.alunoId);if(!al||al.tipo!=="avulso")return;
-    if(cobravel(a)&&a.pago&&(a.dataPago||a.data||"").startsWith(ym)) recebido+=Number(a.valor)||0;
+    if(a.pago&&(a.dataPago||a.data||"").startsWith(ym)) recebido+=Number(a.valor)||0;
   });
   // NB: Velocity é contabilizado à parte (não entra no recebido/a receber das aulas próprias)
   const despMes=(state.despesas||[]).filter(x=>(x.data||"").startsWith(ym)).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
@@ -1173,7 +1176,7 @@ function renderFinanceiro(){
   const prev=previsaoMes(ym);
   const aReceberPerso=Math.max(0,prev.perso-recebido);
   const recVel={};
-  (state.vacacoes||[]).forEach(v=>{if(cobravel(v)&&v.pago&&(v.dataPago||v.data||"").startsWith(ym))recVel[v.unidadeId]=(recVel[v.unidadeId]||0)+(Number(v.valor)||0);});
+  (state.vacacoes||[]).forEach(v=>{if(v.pago&&(v.dataPago||v.data||"").startsWith(ym))recVel[v.unidadeId]=(recVel[v.unidadeId]||0)+(Number(v.valor)||0);});
   let recVelTot=0,aReceberVelTot=0;const arVelU={};
   (state.velUnidades||[]).forEach(u=>{const rec=recVel[u.id]||0;const exp=(prev.vel&&prev.vel[u.id])||0;const ar=Math.max(0,exp-rec);recVelTot+=rec;aReceberVelTot+=ar;arVelU[u.id]=ar;});
   const recebidoTotal=recebido+recVelTot;
@@ -1281,10 +1284,10 @@ function renderFinanceiro(){
       </div>${detalhe?`<div class="opt" style="margin:0 4px ${arReal>0?'8px':'12px'};font-size:12.5px">↳ ${detalhe}</div>`:""}${arReal>0?`<button class="btn" data-velrcv="${u.id}" style="margin:0 0 14px;padding:12px;font-size:14px;background:${uc};color:#fff">✓ Receber tudo do mês · ${money(arReal)}</button>`:""}`;
     list.forEach(v=>{
       const d=parseYmd(v.data);const realizada=v.status==="realizada";let right;
-      if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
+      if(v.pago)right=`<span class="pa ok">Recebido${v.status==="cancelada"?" (cancelada)":""}</span>`; // pago conta como receita mesmo se cancelada
+      else if(v.status==="cancelada")right=`<span class="pa neutral">Cancelada</span>`;
       else if(v.status==="faltou")right=`<span class="pa neutral">Faltou</span>`;
       else if(!realizada)right=`<span class="pa neutral">Agendada</span>`;
-      else if(v.pago)right=`<span class="pa ok">Recebido</span>`;
       else right=`<span class="pa due">A receber</span>`;
       velHtml+=`<div class="aluno" data-vacfin="${v.id}">
         <div class="avatar" style="background:${uc}">${esc(((u.nome||"V")[0]||"V").toUpperCase())}</div>
@@ -1362,7 +1365,7 @@ function renderFinanceiro(){
   el.querySelectorAll("[data-fin]").forEach(c=>c.onclick=()=>{
     const a=aluno(c.dataset.fin);
     if(c.dataset.ftipo==="mensal"){
-      if(c.dataset.fpago==="1")openAluno(a.id); // já pago → abre detalhe (pode desfazer)
+      if(c.dataset.fpago==="1")openAluno(a.id,ym); // já pago → abre detalhe do mês consultado (pode desfazer esse mês)
       else confirmPagarMensal(a,ym);            // marca pago no mês selecionado
     } else openAluno(a.id);
   });
@@ -1447,16 +1450,20 @@ function quickDone(id,kind){
 function quickFaltou(id,kind){
   const snap=snapState();
   if(kind==="aula"){const a=state.aulas.find(x=>x.id===id);if(!a)return;a.status="faltou";a.faltaCobrada=false;}
-  else{const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;v.status="faltou";v.pago=false;v.faltaCobrada=false;}
+  else{const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;v.status="faltou";v.faltaCobrada=false;}
   mark();render();vibrate();offerUndo(snap,"Marcado: faltou","");
 }
-/* tap na ícone de PRESENÇA : valida (agendada→realizada) ou desfaz (realizada→agendada) */
+/* tap na ícone de PRESENÇA : ciclo  ? (agendada) → ✓ (realizada) → ⊘ (cancelada) → ?
+   NUNCA toca no pagamento — presença e pagamento são independentes (uma aula pode ficar cancelada E paga). */
 function togglePresenca(id,kind){
   const snap=snapState();
   const x = kind==="aula" ? state.aulas.find(a=>a.id===id) : (state.vacacoes||[]).find(v=>v.id===id);
   if(!x)return;
-  if(x.status==="realizada"){ x.status="agendada"; x.pago=false; mark();render();vibrate();offerUndo(snap,"Presença desfeita","");}
-  else{ x.status="realizada"; if(kind==="aula"){x.faltaCobrada=false; const al=aluno(x.alunoId); if(al&&al.tipo==="avulso"&&!x.valor)x.valor=Number(al.valorAula)||0;} mark();render();vibrate();offerUndo(snap,"Presença confirmada ✓","green"); }
+  let msg,cor="";
+  if(x.status==="realizada"){ x.status="cancelada"; msg="Aula cancelada"; }            // ✓ → ⊘
+  else if(x.status==="cancelada"){ x.status="agendada"; msg="Voltou para agendada"; }   // ⊘ → ?
+  else{ x.status="realizada"; if(kind==="aula"){x.faltaCobrada=false; const al=aluno(x.alunoId); if(al&&al.tipo==="avulso"&&!x.valor)x.valor=Number(al.valorAula)||0;} msg="Presença confirmada ✓"; cor="green"; } // ? / ✕ → ✓
+  mark();render();vibrate();offerUndo(snap,msg,cor);
 }
 /* tap na ícone de PAGAMENTO : registra ou desfaz (registrar também confirma a presença) */
 function togglePagamento(id,kind){
@@ -1470,14 +1477,14 @@ function togglePagamento(id,kind){
       return;
     }
     if(a.pago){ a.pago=false;a.dataPago=null; mark();render();vibrate();offerUndo(snap,"Pagamento desfeito",""); return; }
-    const confirmou=!cobravel(a);
+    const confirmou=(a.status==="agendada"); // confirma presença só se ainda agendada (não reabre cancelada/faltou)
     const finish=()=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=todayYmd(); mark();render();vibrate();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
     if(al&&al.tipo==="avulso"&&!a.valor){ pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;finish();}); return; }
     finish();
   }else{
     const v=(state.vacacoes||[]).find(x=>x.id===id);if(!v)return;
     if(v.pago){ v.pago=false;v.dataPago=null; mark();render();vibrate();offerUndo(snap,"Pagamento desfeito",""); return; }
-    const confirmou=!cobravel(v); if(confirmou)v.status="realizada"; v.pago=true;v.dataPago=todayYmd();
+    const confirmou=(v.status==="agendada"); if(confirmou)v.status="realizada"; v.pago=true;v.dataPago=todayYmd();
     mark();render();vibrate();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");
   }
 }
@@ -1551,7 +1558,7 @@ function openAula(id){
   if(a.status!=="faltou")
     body+=`<div class="act red" data-act="faltou"><div class="ai">✕</div><div><div>Aluno faltou</div></div></div>`;
   if(a.status!=="cancelada")
-    body+=`<div class="act grey" data-act="cancelada"><div class="ai">🚫</div><div><div>Cancelar aula</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
+    body+=`<div class="act grey" data-act="cancelada"><div class="ai">🚫</div><div><div>Cancelar aula</div><div class="sub">Não conta como falta · o pagamento fica como está</div></div></div>`;
 
   // pagamento (avulso) — SEMPRE visível ; registrar pagamento também confirma a presença
   if(al&&al.tipo==="avulso"){
@@ -1561,7 +1568,7 @@ function openAula(id){
       body+=`<div class="act green" data-act="dataPag"><div class="ai">📅</div><div><div>Pago em ${a.dataPago?esc(dataSem(parseYmd(a.dataPago))):"—"}</div><div class="sub">${money(a.valor)} · toque para mudar a data</div></div></div>`;
       body+=`<div class="act grey" data-act="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO pago</div></div></div>`;
     }else{
-      body+=`<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(valShow)}${!cobravel(a)?" · confirma a presença":""}</div></div></div>`;
+      body+=`<div class="act amber" data-act="pago"><div class="ai">💵</div><div><div>Registrar pagamento</div><div class="sub">${money(valShow)}${a.status==="agendada"?" · confirma a presença":""}</div></div></div>`;
     }
   }else if(al&&al.tipo==="mensal"){
     body+=`<div class="grp-lbl">Pagamento</div><div class="hint" style="margin:0 0 9px">Mensalidade — registrada no <b style="color:var(--ink)">Financeiro</b>.</div>`;
@@ -1602,10 +1609,10 @@ function aulaAction(id,act){
     mark();closeSheet();render();offerUndo(snap,"Presença confirmada ✓","green");return;
   }
   if(act==="faltou"){a.status="faltou";a.faltaCobrada=false;if(al&&al.tipo==="avulso"){if(!a.valor)a.valor=Number(al.valorAula)||0;a.faltaCobrada=confirm("Cobrar esta falta mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");}mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
-  if(act==="cancelada"){a.status="cancelada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Aula cancelada","");return;}
-  if(act==="agendada"){a.status="agendada";a.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
+  if(act==="cancelada"){a.status="cancelada";mark();closeSheet();render();offerUndo(snap,"Aula cancelada","");return;} // pagamento inalterado (independente)
+  if(act==="agendada"){a.status="agendada";mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
   if(act==="pago"){
-    const confirmou=!cobravel(a); // pagar também confirma a presença
+    const confirmou=(a.status==="agendada"); // pagar confirma a presença SÓ se ainda estava agendada (não reabre uma aula cancelada)
     const finish=(dt)=>{ if(confirmou){a.status="realizada";a.faltaCobrada=false;} a.pago=true;a.dataPago=dt;mark();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(a.valor)+" recebido ✓","green"); };
     if(al&&al.tipo==="avulso"&&!a.valor){closeSheet();pedirValor("Valor recebido",Number(al.valorAula)||0,v=>{a.valor=v;pedirData("Registrar pagamento",todayYmd(),dt=>finish(dt));});return;}
     closeSheet();pedirData("Registrar pagamento",todayYmd(),dt=>finish(dt));return;
@@ -1615,10 +1622,11 @@ function aulaAction(id,act){
 }
 
 /* ----- detalhe do ALUNO ----- */
-function openAluno(id){
+function openAluno(id,ym){
   const a=aluno(id);if(!a)return;
   const s=alunoStatus(a);
-  const ym=ymNow();
+  ym=ym||ymNow();
+  const mIdx=Number(ym.slice(5,7))-1, mNome=MESES[mIdx]; // mês consultado (não forçosamente o atual)
   let body=`<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
      <div class="avatar" style="width:56px;height:56px;border-radius:16px;font-size:22px;background:${a.cor}">${initials(a.nome)}</div>
      <div><div style="font-weight:800;font-size:19px">${esc(a.nome)}</div>
@@ -1635,11 +1643,11 @@ function openAluno(id){
       const rest=plano-usadas;
       const cor=rest<0?'var(--red)':(rest===0?'var(--amber)':'var(--ink)');
       body+=`<div class="info-line"><span class="k">Plano</span><span class="v">${plano} aulas/mês</span></div>
-       <div class="info-line"><span class="k">Usadas em ${MESES[new Date().getMonth()].slice(0,3)}</span><span class="v" style="color:${cor}">${usadas} / ${plano}${rest<0?" (excedeu "+(-rest)+")":rest===0?" (completo)":" · faltam "+rest}</span></div>`;
+       <div class="info-line"><span class="k">Usadas em ${mNome.slice(0,3)}</span><span class="v" style="color:${cor}">${usadas} / ${plano}${rest<0?" (excedeu "+(-rest)+")":rest===0?" (completo)":" · faltam "+rest}</span></div>`;
     }else{
-      body+=`<div class="info-line"><span class="k">Aulas em ${MESES[new Date().getMonth()].slice(0,3)}</span><span class="v">${usadas}</span></div>`;
+      body+=`<div class="info-line"><span class="k">Aulas em ${mNome.slice(0,3)}</span><span class="v">${usadas}</span></div>`;
     }
-    body+=`<div class="info-line"><span class="k">${MESES[new Date().getMonth()]}</span><span class="v" style="color:${pagoMes(a.id,ym)?'var(--green)':'var(--amber)'}">${pagoMes(a.id,ym)?"Pago ✓":"Pendente"}</span></div>`;
+    body+=`<div class="info-line"><span class="k">${mNome}</span><span class="v" style="color:${pagoMes(a.id,ym)?'var(--green)':'var(--amber)'}">${pagoMes(a.id,ym)?"Pago ✓":"Pendente"}</span></div>`;
   }else{
     const pend=state.aulas.filter(x=>x.alunoId===a.id&&cobravel(x)&&!x.pago); // dette réelle : séances FAITES (réalisées / absences facturées) non payées
     const tot=pend.reduce((s,x)=>s+(Number(x.valor)||Number(a.valorAula)||0),0);
@@ -1663,8 +1671,8 @@ function openAluno(id){
   // ação de pagamento
   if(a.tipo==="mensal"){
     body+= pagoMes(a.id,ym)
-      ? `<div class="act grey" data-pa="desfazer"><div class="ai">↩</div><div><div>Desfazer pagamento de ${MESES[new Date().getMonth()]}</div></div></div>`
-      : `<div class="act green" data-pa="pagar"><div class="ai">💵</div><div><div>Receber mensalidade</div><div class="sub">${money(a.mensalidade)} · ${MESES[new Date().getMonth()]}</div></div></div>`;
+      ? `<div class="act grey" data-pa="desfazer"><div class="ai">↩</div><div><div>Desfazer pagamento de ${mNome}</div></div></div>`
+      : `<div class="act green" data-pa="pagar"><div class="ai">💵</div><div><div>Receber mensalidade</div><div class="sub">${money(a.mensalidade)} · ${mNome}</div></div></div>`;
   }
   // cobrança WhatsApp se houver algo em aberto
   const deve = a.tipo==="mensal" ? !pagoMes(a.id,ym)
@@ -1683,7 +1691,7 @@ function openAluno(id){
     const act=b.dataset.pa;
     if(act==="editar"){closeSheet();formAluno(a);}
     else if(act==="excluir"){if(confirm(`Excluir ${a.nome}, suas aulas e pagamentos?`)){state.alunos=state.alunos.filter(x=>x.id!==id);state.aulas=state.aulas.filter(x=>x.alunoId!==id);state.series=(state.series||[]).filter(s=>s.alunoId!==id);state.pagamentos=state.pagamentos.filter(p=>p.alunoId!==id);mark();closeSheet();render();toast("Aluno excluído");}}
-    else if(act==="pagar"){registrarPagamento(a);closeSheet();render();}
+    else if(act==="pagar"){closeSheet();confirmPagarMensal(a,ym);}
     else if(act==="cobrar"){cobrar(a,a.tipo,ym);}
     else if(act==="desfazer"){state.pagamentos=state.pagamentos.filter(p=>!(p.alunoId===a.id&&p.mesRef===ym));mark();closeSheet();render();toast("Pagamento desfeito");}
     else if(act==="historico"){closeSheet();openHistAluno(a);}
@@ -1699,7 +1707,7 @@ function openHistAluno(a){
   const taxa=baseP?Math.round(realizadas/baseP*100):null;
   let pago=0;
   state.pagamentos.forEach(p=>{if(p.alunoId===a.id)pago+=Number(p.valor)||0;});
-  state.aulas.forEach(x=>{if(x.alunoId===a.id&&cobravel(x)&&x.pago)pago+=Number(x.valor)||0;});
+  state.aulas.forEach(x=>{if(x.alunoId===a.id&&x.pago)pago+=Number(x.valor)||0;});
   let body=`<div class="summary" style="margin:0 0 12px">
     <div class="sum green"><div class="lbl">Total pago</div><div class="val">${money(pago)}</div></div>
     <div class="sum"><div class="lbl">Presença</div><div class="val">${taxa==null?"—":taxa+"%"}</div></div>
@@ -1722,7 +1730,7 @@ function openHistAluno(a){
     const[yy,mm]=ym.split("-").map(Number);const lst=groups[ym];
     const rz=lst.filter(x=>x.status==="realizada").length;
     const ft=lst.filter(x=>x.status==="faltou").length;
-    let pagoMes=0;if(a.tipo==="avulso")lst.forEach(x=>{if(cobravel(x)&&x.pago)pagoMes+=Number(x.valor)||0;});
+    let pagoMes=0;if(a.tipo==="avulso")lst.forEach(x=>{if(x.pago)pagoMes+=Number(x.valor)||0;});
     const sub=`${rz} realizada(s)${ft?` · ${ft} falta(s)`:""}${a.tipo==="avulso"&&pagoMes?` · ${money(pagoMes)} pago`:""}`;
     body+=`<div class="section-title" style="margin:18px 4px 4px">${MESES[mm-1]} ${yy} <span class="count">${lst.length}</span></div>
       <div class="opt" style="margin:0 4px 8px;font-size:12px;text-transform:none;letter-spacing:0">${sub}</div>`;
@@ -1799,7 +1807,7 @@ function formDespesa(existing){
     draft.data=document.getElementById("dData").value;
     draft.valor=Number(document.getElementById("dVal").value)||0;
     draft.categoria=document.getElementById("dCat").value;
-    if(!draft.data||!draft.valor){toast("Preencha data e valor","amber");return;}
+    if(!draft.data||!(draft.valor>0)){toast("Preencha data e um valor maior que zero","amber");return;}
     const idx=state.despesas.findIndex(x=>x.id===draft.id);
     if(idx>=0)state.despesas[idx]=draft;else state.despesas.push(draft);
     mark();closeSheet();ui.tab="financeiro";setTab("financeiro");render();toast(isEdit?"Despesa salva ✓":"Despesa adicionada ✓","green");
@@ -1843,8 +1851,15 @@ function formAluno(existing){
     draft.nome=nome;
     draft.tel=document.getElementById("fTel").value.trim();
     draft.local=document.getElementById("fLocal").value.trim();
-    if(draft.tipo==="mensal"){draft.mensalidade=Number(document.getElementById("fMens").value)||0;draft.venc=Number(document.getElementById("fVenc").value)||0;draft.aulasPlano=Number(document.getElementById("fPlano").value)||0;draft.valorAula=0;}
+    if(draft.tipo==="mensal"){draft.mensalidade=Number(document.getElementById("fMens").value)||0;draft.venc=Number(document.getElementById("fVenc").value)||0;draft.aulasPlano=Number(document.getElementById("fPlano").value)||0;draft.valorAula=0;draft.desde=draft.desde||ymNow();}
     else{draft.valorAula=Number(document.getElementById("fVal").value)||0;draft.venc=Number(document.getElementById("fVencA").value)||0;draft.mensalidade=0;}
+    // ao mudar o valor por aula de um avulso, propaga às aulas FUTURAS (agendadas, não pagas) e às séries do aluno —
+    // aulas já realizadas/pagas mantêm seu valor histórico (snapshot)
+    if(isEdit&&draft.tipo==="avulso"&&(Number(draft.valorAula)||0)!==(Number(existing.valorAula)||0)){
+      const nv=Number(draft.valorAula)||0;
+      state.aulas.forEach(a=>{if(a.alunoId===draft.id&&a.status==="agendada"&&!a.pago)a.valor=nv;});
+      (state.series||[]).forEach(s=>{if(s.alunoId===draft.id)s.valor=nv;});
+    }
     const idx=state.alunos.findIndex(a=>a.id===draft.id);
     if(idx>=0)state.alunos[idx]=draft;else state.alunos.push(draft);
     mark();closeSheet();ui.tab="alunos";setTab("alunos");render();toast(existing?"Aluno salvo ✓":"Aluno cadastrado ✓","green");
@@ -1862,13 +1877,13 @@ function openVacacao(id){
   body+=`<div class="grp-lbl">Presença</div>`;
   if(v.status!=="realizada")body+=`<div class="act green" data-vac="realizada"><div class="ai">✓</div><div><div>Marcar como realizada</div></div></div>`;
   if(v.status!=="faltou")body+=`<div class="act red" data-vac="faltou"><div class="ai">✕</div><div><div>Não rolou / faltou</div></div></div>`;
-  if(v.status!=="cancelada")body+=`<div class="act grey" data-vac="cancelada"><div class="ai">🚫</div><div><div>Cancelar vacação</div><div class="sub">Não conta como falta nem cobrança</div></div></div>`;
+  if(v.status!=="cancelada")body+=`<div class="act grey" data-vac="cancelada"><div class="ai">🚫</div><div><div>Cancelar vacação</div><div class="sub">Não conta como falta · o pagamento fica como está</div></div></div>`;
   body+=`<div class="grp-lbl">Pagamento <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-faint)">· normalmente no fim do mês</span></div>`;
   if(v.pago){
     body+=`<div class="act green" data-vac="dataPag"><div class="ai">📅</div><div><div>Recebido em ${v.dataPago?esc(dataSem(parseYmd(v.dataPago))):"—"}</div><div class="sub">${money(v.valor)} · toque para mudar a data</div></div></div>`;
     body+=`<div class="act grey" data-vac="naopago"><div class="ai">↩</div><div><div>Marcar como NÃO recebido</div></div></div>`;
   }else{
-    body+=`<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}${!cobravel(v)?" · confirma a presença":""}</div></div></div>`;
+    body+=`<div class="act amber" data-vac="pago"><div class="ai">💵</div><div><div>Registrar recebimento</div><div class="sub">${money(v.valor)} da ${esc(nome)}${v.status==="agendada"?" · confirma a presença":""}</div></div></div>`;
   }
   let mais=`<div class="act" data-vac="trocar" style="background:rgba(100,116,139,.16);border-color:transparent"><div class="ai" style="background:rgba(100,116,139,.28);color:#94a3b8">🔄</div><div><div>${v.trocada?"Desfazer troca":"Trocar com colega"}</div><div class="sub">${v.trocada?"Volta para Velocity normal":"Marca o dia como trocado (outra cor)"}</div></div></div>`;
   mais+=`<div class="act blue" data-vac="editar"><div class="ai">✎</div><div><div>Editar vacação</div></div></div>`;
@@ -1898,10 +1913,10 @@ function vacacaoAction(id,act){
   if(act==="excluir"){if(!confirm("Excluir esta vacação?"))return;const snap=snapState();state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Vacação excluída","");return;}
   const snap=snapState();
   if(act==="realizada"){v.status="realizada";mark();closeSheet();render();offerUndo(snap,"Presença confirmada ✓","green");return;}
-  if(act==="faltou"){v.status="faltou";v.pago=false;v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
-  if(act==="cancelada"){v.status="cancelada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Vacação cancelada","");return;}
-  if(act==="agendada"){v.status="agendada";v.pago=false;mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
-  if(act==="pago"){const confirmou=!cobravel(v);closeSheet();pedirData("Registrar recebimento",todayYmd(),dt=>{if(confirmou)v.status="realizada";v.pago=true;v.dataPago=dt;mark();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");});return;}
+  if(act==="faltou"){v.status="faltou";v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
+  if(act==="cancelada"){v.status="cancelada";mark();closeSheet();render();offerUndo(snap,"Vacação cancelada","");return;} // pagamento inalterado (independente)
+  if(act==="agendada"){v.status="agendada";mark();closeSheet();render();offerUndo(snap,"Voltou para agendada","");return;}
+  if(act==="pago"){const confirmou=(v.status==="agendada");closeSheet();pedirData("Registrar recebimento",todayYmd(),dt=>{if(confirmou)v.status="realizada";v.pago=true;v.dataPago=dt;mark();render();offerUndo(snap,(confirmou?"Presença + ":"")+money(v.valor)+" recebido ✓","green");});return;}
   if(act==="dataPag"){closeSheet();pedirData("Data do recebimento",v.dataPago||todayYmd(),dt=>{v.dataPago=dt;mark();render();offerUndo(snap,"Data atualizada ✓","green");});return;}
   if(act==="naopago"){v.pago=false;v.dataPago=null;mark();closeSheet();render();offerUndo(snap,"Marcado como não recebido","");return;}
 }
