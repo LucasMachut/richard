@@ -474,7 +474,7 @@
    Dados em localStorage + backup/restauração JSON
    ===================================================================== */
 const KEY="richard_personal_v1";
-const APP_VERSION="5.2";
+const APP_VERSION="5.4";
 /* ---- Supabase (synchro cloud) ---- */
 const SUPA_URL="https://zadsiirtjvznmcepawje.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
@@ -647,13 +647,14 @@ function ensureVelSerie(serie){
   if(!serie||!serie.ativo)return;
   if(!state.vacacoes)state.vacacoes=[];
   const horizon=new Date();horizon.setDate(horizon.getDate()+HORIZON_WEEKS*7);
+  const exc=serie.excecoes||[]; // dates explicitement supprimées « só esta vez » → on ne les recrée pas
   const datas=state.vacacoes.filter(v=>v.serieId===serie.id).map(v=>v.data).sort();
   let cursor;
   if(datas.length){cursor=parseYmd(datas[datas.length-1]);cursor.setDate(cursor.getDate()+7);}
   else cursor=parseYmd(serie.desde);
   while(cursor<=horizon){
     const ymd=ymdOf(cursor);
-    if(!state.vacacoes.some(v=>v.serieId===serie.id&&v.data===ymd)){
+    if(exc.indexOf(ymd)<0&&!state.vacacoes.some(v=>v.serieId===serie.id&&v.data===ymd)){
       state.vacacoes.push({id:uid(),unidadeId:serie.unidadeId,data:ymd,hora:serie.hora,dur:serie.dur,valor:serie.valor||0,local:serie.local||"",status:"agendada",pago:false,serieId:serie.id});
     }
     cursor.setDate(cursor.getDate()+7);
@@ -1923,7 +1924,23 @@ function vacacaoAction(id,act){
     state.vacacoes=state.vacacoes.filter(x=>!(x.serieId===serie.id&&x.status==="agendada"&&x.data>hj));
     mark();closeSheet();render();offerUndo(snap,"Recorrência encerrada","");return;
   }
-  if(act==="excluir"){if(!confirm("Excluir esta vacação?"))return;const snap=snapState();state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Vacação excluída","");return;}
+  if(act==="excluir"){
+    if(v.serieId){ // créneau récurrent : « só esta vez » (exception) ou « encerrar a recorrência »
+      const d=parseYmd(v.data);const dateStr=`${DIAS_LG[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
+      const body=`<div class="hint" style="margin:0 0 16px;font-size:14px;color:var(--ink-soft)">Esta Velocity se repete toda semana. O que você quer fazer?</div>
+        <div class="act red" data-ex="uma"><div class="ai">🗑</div><div><div>Excluir só esta vez</div><div class="sub">Remove só ${esc(dateStr)} · as outras continuam</div></div></div>
+        <div class="act grey" data-ex="serie"><div class="ai">🔁</div><div><div>Encerrar a recorrência</div><div class="sub">Para de criar esta Velocity fixa</div></div></div>`;
+      openSheet("Excluir vacação",body);
+      document.getElementById("sheetBody").querySelectorAll("[data-ex]").forEach(b=>b.onclick=()=>{
+        if(b.dataset.ex==="serie"){vacacaoAction(id,"serie");return;}
+        const snap=snapState();const serie=(state.velSeries||[]).find(s=>s.id===v.serieId);
+        if(serie){serie.excecoes=serie.excecoes||[];if(serie.excecoes.indexOf(v.data)<0)serie.excecoes.push(v.data);}
+        state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Vacação excluída","");
+      });
+      return;
+    }
+    if(!confirm("Excluir esta vacação?"))return;const snap=snapState();state.vacacoes=state.vacacoes.filter(x=>x.id!==id);mark();closeSheet();render();offerUndo(snap,"Vacação excluída","");return;
+  }
   const snap=snapState();
   if(act==="realizada"){v.status="realizada";mark();closeSheet();render();offerUndo(snap,"Presença confirmada ✓","green");return;}
   if(act==="faltou"){v.status="faltou";v.faltaCobrada=confirm("Cobrar esta falta da Velocity mesmo assim?\n\nOK = lança em « a receber » · Cancelar = não cobra");mark();closeSheet();render();offerUndo(snap,"Marcado: faltou","");return;}
@@ -2337,10 +2354,27 @@ render();
    ============================================================ */
 function setDirty(v){try{v?localStorage.setItem(DIRTY_KEY,"1"):localStorage.removeItem(DIRTY_KEY);}catch(e){}}
 function isDirty(){try{return localStorage.getItem(DIRTY_KEY)==="1";}catch(e){return false;}}
-function cloudInit(){
-  if(!window.supabase){return;} // hors-ligne / CDN bloqué → mode local uniquement
-  try{ sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true}}); }catch(e){ return; }
-  sb.auth.getSession().then(({data})=>{ (data&&data.session)?onAuthed():showLogin(); }).catch(()=>{});
+function localOnly(msg){
+  cloudReady=false;
+  const o=document.getElementById("loginScreen"); if(o)o.classList.remove("show");
+  if(msg)toast(msg,"amber");
+  window.addEventListener("online",()=>{ if(!cloudReady)cloudInit(); },{once:true});
+}
+async function cloudUp(){
+  // le serveur répond-il ? (projet supprimé/en pause, DNS mort, hors-ligne → false)
+  try{
+    const c=new AbortController(), t=setTimeout(()=>c.abort(),8000);
+    const r=await fetch(SUPA_URL+"/auth/v1/health",{headers:{apikey:SUPA_KEY},signal:c.signal});
+    clearTimeout(t); return r.ok;
+  }catch(e){ return false; }
+}
+async function cloudInit(){
+  if(!window.supabase){ return localOnly(""); } // CDN bloqué → mode local uniquement
+  try{ sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true}}); }catch(e){ return localOnly(""); }
+  if(!(await cloudUp())) return localOnly("Nuvem indisponível — modo local (seus dados estão salvos)");
+  let sess=null;
+  try{ const {data}=await sb.auth.getSession(); sess=data&&data.session; }catch(e){}
+  sess?onAuthed():showLogin();
 }
 function showLogin(msg){
   let o=document.getElementById("loginScreen");
@@ -2362,7 +2396,12 @@ function showLogin(msg){
     const b=document.getElementById("logBtn");b.textContent="Entrando…";
     try{
       const {error}=await sb.auth.signInWithPassword({email,password});
-      if(error){showLogin(error.message&&/Invalid login/i.test(error.message)?"Email ou senha incorretos":(error.message||"Erro"));}
+      if(error){
+        const m=error.message||"";
+        if(/invalid login|invalid_credentials|bad credential/i.test(m)) showLogin("Email ou senha incorretos");
+        else if(!error.status||/fetch|network|load failed|abort|timeout/i.test(m)) showLogin("Servidor fora do ar — não é a sua senha. Use « só neste aparelho », seus dados estão salvos.");
+        else showLogin(m||"Erro");
+      }
       else{o.classList.remove("show");onAuthed();}
     }catch(e){showLogin("Sem conexão. Tente de novo.");}
   };
@@ -2375,7 +2414,10 @@ async function onAuthed(){
     if(!error){
       if(data&&data.data){
         if(isDirty()){ await cloudPush(); }                 // modifs locales non poussées → on garde le local et on pousse
-        else { applyingRemote=true; state=migrate(data.data); save(); render(); applyingRemote=false; }
+        else {
+          try{ if(state&&state.alunos)localStorage.setItem(KEY+"__bak",JSON.stringify(state)); }catch(e){} // snapshot avant écrasement
+          applyingRemote=true; state=migrate(data.data); save(); render(); applyingRemote=false;
+        }
       }else{ await cloudPush(); }                            // pas encore de ligne cloud → on initialise avec le local
     }
   }catch(e){}
